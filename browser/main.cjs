@@ -65,10 +65,14 @@ app.enableSandbox();
 // Use Chromium's user-namespace sandbox in the VPS container; the legacy SUID helper is not used.
 if (webMode && process.platform === 'linux') app.commandLine.appendSwitch('disable-setuid-sandbox');
 // A private app directory; never open, edit or copy a personal Chrome profile.
-const root =
-  process.env.MULTIOLX_BROWSER_DATA_DIR || path.join(app.getPath('appData'), 'MultiOLX Browser');
+const root = require('./data-directory.cjs').dataDirectory({
+  home: app.getPath('home'),
+  appData: app.getPath('appData'),
+  localAppData: process.env.LOCALAPPDATA,
+}).root;
 nativeFs.mkdirSync(root, { recursive: true, mode: 0o700 });
 app.setPath('userData', root);
+app.setPath('sessionData', root);
 protocol.registerSchemesAsPrivileged([
   {
     scheme: 'multiolx-browser',
@@ -2077,6 +2081,26 @@ async function start() {
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
   app.on('second-instance', (_event, args) => {
+    if (args.includes('--diagnose-ui'))
+      void (async () => {
+        const ui = await win.webContents.executeJavaScript(`({
+          ready: document.readyState,
+          profileButtons: document.getElementById('profiles')?.children.length,
+          status: document.getElementById('status')?.textContent,
+        })`);
+        await fs.writeFile(
+          path.resolve('artifacts/ui-startup-diagnostic.json'),
+          JSON.stringify(
+            {
+              root,
+              profiles: profiles.map((p) => ({ id: p.id, name: p.name })),
+              ui,
+            },
+            null,
+            2,
+          ),
+        );
+      })().catch((error) => console.log('MULTIOLX_UI_DIAGNOSTIC_FAILED ' + error.message));
     if (args.includes('--listing-walkthrough'))
       void (async () => {
         const command = JSON.parse(

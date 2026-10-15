@@ -44,7 +44,7 @@ O limite padrão é **2 páginas ativas**, ajustável para 4, 6 ou 8. As contas 
 
 ## Dados
 
-Perfis e sessões continuam em **%APPDATA%/MultiOLX Browser**, fora deste repositório. Cookies e resumos adicionais usam o cofre do sistema operacional. Não compartilhe esse diretório: contém sessões autenticadas. Faça backup com o aplicativo fechado.
+No Windows, perfis e sessões ficam em **%USERPROFILE%/.multiolx/browser**, fora deste repositório. Esse caminho é o mesmo ao abrir pelo atalho ou pelo Codex da Microsoft Store. Na primeira abertura, os dados anteriores de AppData (incluindo a pasta redirecionada do Codex) são copiados para o novo local; a origem é preservada. Cookies e resumos adicionais usam o cofre do sistema operacional. Não compartilhe esse diretório: contém sessões autenticadas. Faça backup com o aplicativo fechado. A configuração `MULTIOLX_BROWSER_DATA_DIR` continua definindo o diretório dos testes e do servidor.
 
 O painel antigo foi desativado e seu código movido para **legacy-panel/**, ignorado pelo Git, após a exclusão em lote ser bloqueada pela revisão automática. A pasta de legado não participa da execução, testes ou dependências. Os dados antigos e o arquivo local de configuração foram preservados. O botão Abrir painel e a ponte para localhost:3001 foram retirados. O servidor antigo e seus containers PostgreSQL/Redis foram encerrados, preservando os volumes.
 

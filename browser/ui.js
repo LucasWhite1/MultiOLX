@@ -242,19 +242,41 @@ el('create').onsubmit = (event) => {
     status(`Perfil ${profile.name} criado. Selecione-o para entrar na OLX.`);
   });
 };
+let renamingProfileId = null;
 el('rename').onclick = () =>
   act(async () => {
     const profile = profiles.find((p) => p.id === active);
+    if (!profile || el('renameDialog').open) return;
+    renamingProfileId = profile.id;
     el('renameName').value = profile.name;
-    el('renameDialog').showModal();
+    await api.profileDialog?.(true);
+    try {
+      el('renameDialog').showModal();
+      el('renameName').focus();
+      el('renameName').select();
+    } catch (error) {
+      await api.profileDialog?.(false);
+      throw error;
+    }
   });
 el('cancelRename').onclick = () => el('renameDialog').close();
+el('renameDialog').addEventListener('close', () => {
+  renamingProfileId = null;
+  void act(() => api.profileDialog?.(false));
+});
 el('renameForm').onsubmit = (event) => {
   event.preventDefault();
   void act(async () => {
-    await api.rename(active, el('renameName').value);
+    if (!renamingProfileId) return;
+    const name = el('renameName').value.trim();
+    if (!name) {
+      el('renameName').focus();
+      return;
+    }
+    await api.rename(renamingProfileId, name);
     el('renameDialog').close();
     await render();
+    status(`Perfil renomeado para ${name}.`);
   });
 };
 for (const id of ['back', 'forward', 'reload', 'home', 'chat'])

@@ -281,6 +281,7 @@ function updateVisuals(view) {
   void next.catch(() => {});
   return next;
 }
+let profileDialogOpen = false;
 function display(view) {
   const previous = displayedView;
   if (displayedView) {
@@ -291,6 +292,7 @@ function display(view) {
   displayedView = view;
   if (previous) void updateVisuals(previous);
   if (view) {
+    view.setVisible(!profileDialogOpen);
     view.webContents.setBackgroundThrottling(false);
     win.contentView.addChildView(view);
     resize();
@@ -872,7 +874,15 @@ async function start() {
       profile.name = before;
       throw error;
     }
+    if (active === id) send({ source: profile.name });
+    notify('inbox:state', inboxState());
     return profile;
+  });
+  registerHandler('profiles:dialog', (event, visible) => {
+    trusted(event);
+    profileDialogOpen = visible === true;
+    if (!webMode && displayedView) displayedView.setVisible(!profileDialogOpen);
+    if (!profileDialogOpen && displayedView) resize();
   });
   registerHandler('profiles:open', async (event, id) => {
     trusted(event);
@@ -1153,6 +1163,36 @@ async function start() {
       fixtureRequests !== 1
     )
       throw new Error('A navegação isolada não carregou a fixture.');
+    console.log('BROWSER_SMOKE: renomear com página nativa aberta');
+    send({ profileId: a.id, mode: 'individual' });
+    await win.webContents.executeJavaScript(`(async () => {
+      await render();
+      document.getElementById('rename').click();
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    if (
+      displayedView.getVisible() ||
+      !(await win.webContents.executeJavaScript("document.getElementById('renameDialog').open"))
+    )
+      throw new Error('A página nativa encobriu o formulário de renomear.');
+    await win.webContents.executeJavaScript(`document.getElementById('cancelRename').click()`);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    if (!displayedView.getVisible()) throw new Error('Cancelar não restaurou a página.');
+    await win.webContents.executeJavaScript(`document.getElementById('rename').click()`);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    await win.webContents.executeJavaScript(`
+      document.getElementById('renameName').value = 'Fixture A atualizada';
+      document.getElementById('renameForm').requestSubmit();
+    `);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    if (
+      !displayedView.getVisible() ||
+      profiles.find((p) => p.id === a.id).name !== 'Fixture A atualizada'
+    )
+      throw new Error('Salvar nome não restaurou a página ou o catálogo.');
+    await win.webContents.executeJavaScript(
+      `window.multiBrowser.rename('${a.id}', 'Fixture A renomeada')`,
+    );
     await win.webContents.executeJavaScript('window.multiBrowser.close()');
     if (views.size !== 0) throw new Error('O perfil não foi fechado.');
     sa.protocol.unhandle('https');

@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('multiBrowser', {
   list: () => ipcRenderer.invoke('profiles:list'),
   create: (name) => ipcRenderer.invoke('profiles:create', name),
   rename: (id, name) => ipcRenderer.invoke('profiles:rename', id, name),
+  profileDialog: (visible) => ipcRenderer.invoke('profiles:dialog', visible),
   open: (id) => ipcRenderer.invoke('profiles:open', id),
   close: () => ipcRenderer.invoke('profiles:close'),
   navigate: (action) => ipcRenderer.invoke('browser:navigate', action),

@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+data/
+coverage/
+test-results/
+*.log
+artifacts/
+olx-conexao-verificada.png
+legacy-panel/

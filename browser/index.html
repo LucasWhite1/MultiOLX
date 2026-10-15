@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <title>MultiOLX Browser</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header>
+      <div class="brand">
+        m<span>MultiOLX <small>Browser</small></span>
+      </div>
+      <button id="allChats" hidden>← Conversas unificadas</button
+      ><span id="currentSource" class="account-tag" hidden></span>
+      <button id="backListings" hidden>← Anúncios</button
+      ><button id="fillListing" hidden>Preencher / continuar</button
+      ><button id="sendListing" hidden>Enviar anúncio</button>
+      <div class="resource-controls">
+        <span id="resourceStats">Modo leve</span><label for="pageBudget">Páginas ativas</label
+        ><select id="pageBudget">
+          <option value="2">2 · leve</option>
+          <option value="4">4</option>
+          <option value="6">6</option>
+          <option value="8">8</option></select
+        ><label class="economy-label"
+          ><input id="economy" type="checkbox" checked />Economizar em segundo plano</label
+        >
+      </div>
+    </header>
+    <aside>
+      <h2>Seus perfis</h2>
+      <p>Cada perfil mantém sua própria sessão.</p>
+      <button id="unified">Chats unificados</button>
+      <button id="listings" class="sidebar-listings">Anúncios</button>
+      <div id="profiles"></div>
+      <form id="create">
+        <label for="name">Novo perfil</label
+        ><input id="name" maxlength="80" placeholder="Ex.: Maria" required /><button>
+          Criar perfil
+        </button>
+      </form>
+      <button id="rename" disabled>Renomear perfil atual</button>
+      <p class="hint">
+        Fechar seu Chrome pessoal não fecha este navegador. Sair da OLX pode revogar a sessão.
+      </p>
+    </aside>
+    <main>
+      <nav>
+        <button id="back" disabled title="Voltar">←</button
+        ><button id="forward" disabled title="Avançar">→</button
+        ><button id="reload" disabled>Recarregar</button><button id="home" disabled>OLX</button
+        ><button id="chat" disabled>Chat</button><button id="close" disabled>Fechar perfil</button
+        ><span id="location">Nenhum perfil aberto</span>
+      </nav>
+      <section class="welcome">
+        <div class="symbol">m</div>
+        <h1>Um espaço para cada conta</h1>
+        <p>Crie ou selecione um perfil e entre diretamente na OLX.</p>
+        <p>As sessões deste aplicativo são independentes do seu Chrome pessoal.</p>
+        <p class="hint">
+          Use Chats unificados para acompanhar as contas e responder diretamente no chat da OLX.
+        </p>
+      </section>
+      <section id="unifiedInbox" hidden>
+        <div class="inbox-list">
+          <div class="inbox-heading">
+            <h2>Chats unificados</h2>
+            <button
+              id="filterToggle"
+              popovertarget="inboxFilters"
+              title="Filtrar conversas"
+              aria-label="Filtrar conversas"
+            >
+              <svg
+                width="19"
+                height="19"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                aria-hidden="true"
+              >
+                <path d="M4 5h16l-6 7v6l-4 2v-8z" />
+              </svg>
+            </button>
+            <button id="refreshInbox" title="Atualizar chats">↻</button>
+          </div>
+          <label class="sr-only" for="inboxSearch">Buscar conversas</label
+          ><input id="inboxSearch" placeholder="Buscar contato, anúncio ou mensagem" />
+          <div id="inboxFilters" popover="auto">
+            <div class="filter-heading">
+              <strong>Filtros</strong
+              ><button
+                popovertarget="inboxFilters"
+                popovertargetaction="hide"
+                aria-label="Fechar filtros"
+              >
+                ×
+              </button>
+            </div>
+            <label for="inboxFilter">Conta</label
+            ><select id="inboxFilter">
+              <option value="">Todas as contas</option>
+            </select>
+            <label for="attentionFilter">Atendimento</label>
+            <select id="attentionFilter">
+              <option value="">Todos os atendimentos</option>
+              <option value="unread">Não visualizadas</option>
+              <option value="awaiting">Visualizadas · aguardam resposta</option>
+              <option value="outgoing">Você enviou a última</option>
+              <option value="read">Visualizadas · autoria não identificada</option>
+              <option value="unknown">Estado não identificado</option>
+            </select>
+            <button id="clearFilters">Limpar filtros</button>
+          </div>
+          <div id="inboxAccounts" class="inbox-accounts"></div>
+          <div id="inboxCount" class="inbox-count"></div>
+          <div id="inboxRows" class="inbox-rows"></div>
+        </div>
+        <div class="conversation-placeholder">
+          <h1>Seu atendimento em um só lugar</h1>
+          <p>Escolha uma conversa à esquerda.</p>
+          <p class="hint">O chat abrirá na sessão da conta indicada.</p>
+          <div id="conversationOwner"></div>
+        </div>
+      </section>
+      <section id="listingWorkspace" hidden>
+        <div class="listing-workspace-heading">
+          <div>
+            <h1>Anúncios</h1>
+            <p>Crie uma vez. Personalize apenas o que precisar em cada conta.</p>
+          </div>
+          <select id="draftPicker" aria-label="Rascunhos"></select
+          ><button id="newListing">Novo anúncio</button><button id="saveListing">Salvar</button>
+        </div>
+        <div id="listingNotice" role="status"></div>
+        <details id="listingBatch" class="listing-panel" hidden>
+          <summary id="listingBatchTitle" role="status" aria-live="polite"></summary>
+          <div id="listingBatchJobs"></div>
+          <button id="cancelListingBatch" type="button">Cancelar pendentes</button>
+        </details>
+        <details class="listing-panel">
+          <summary>IA para preencher características · DeepSeek Flash</summary>
+          <p>
+            Usa título, descrição e a primeira foto do produto para escolher opções disponíveis na
+            OLX. Revise antes de publicar.
+          </p>
+          <label
+            ><input type="checkbox" id="listingAIEnabled" checked /> Preencher características com
+            IA</label
+          >
+          <label for="listingAIKey">Chave DeepSeek</label>
+          <input
+            id="listingAIKey"
+            type="password"
+            autocomplete="off"
+            placeholder="Deixe vazio para manter a chave salva"
+          />
+          <button id="saveListingAI">Salvar configuração</button>
+          <button id="testListingAI">Testar conexão</button>
+          <p id="listingAIStatus" role="status"></p>
+        </details>
+        <div class="listing-columns">
+          <div class="listing-panel">
+            <h2>Anúncio base</h2>
+            <label for="listing-group">Tipo de anúncio</label
+            ><select id="listing-group">
+              <option>Produtos</option>
+              <option>Automóveis, Peças e Acessórios</option>
+              <option>Imóveis</option>
+              <option>Serviços</option>
+              <option>Vagas de emprego</option>
+            </select>
+            <label for="listing-condition">Condição do produto</label>
+            <select id="listing-condition">
+              <option value="">Selecione antes de preparar</option>
+              <option>Novo</option>
+              <option>Usado - Excelente</option>
+              <option>Usado - Bom</option>
+              <option>Recondicionado</option>
+              <option>Com defeito ou avarias</option>
+            </select>
+            <label for="listing-title">Título</label
+            ><input
+              id="listing-title"
+              maxlength="90"
+              placeholder="Ex.: iPhone 12 128 GB em ótimo estado"
+            />
+            <label for="listing-description">Descrição</label
+            ><textarea
+              id="listing-description"
+              maxlength="6000"
+              rows="7"
+              placeholder="Escreva uma única descrição para todas as contas"
+            ></textarea>
+            <div class="listing-field-pair">
+              <div>
+                <label for="listing-price">Preço (R$)</label
+                ><input
+                  id="listing-price"
+                  inputmode="decimal"
+                  placeholder="1500,00"
+                  maxlength="14"
+                />
+              </div>
+              <div>
+                <label for="listing-postalCode">CEP</label
+                ><input
+                  id="listing-postalCode"
+                  inputmode="numeric"
+                  placeholder="00000-000"
+                  maxlength="9"
+                />
+              </div>
+            </div>
+            <label for="listing-category">Categoria de referência</label
+            ><input
+              id="listing-category"
+              maxlength="200"
+              placeholder="Ex.: Celulares e telefonia"
+            />
+            <label for="listing-details">Informações para a IA</label>
+            <textarea
+              id="listing-details"
+              rows="3"
+              maxlength="2000"
+              placeholder="Ex.: novo e lacrado; marca Lattafa. Informe apenas fatos conhecidos."
+            ></textarea>
+            <div class="listing-photo-heading">
+              <h2>Fotos</h2>
+              <span id="photoCount">0/20 fotos</span
+              ><button id="addListingPhotos">Adicionar fotos</button>
+            </div>
+            <p class="hint">
+              A primeira foto será a capa. Produtos aceitam até 6 fotos; Autos e Imóveis, até 20.
+            </p>
+            <div id="listingPhotos"></div>
+          </div>
+          <div class="listing-panel">
+            <div class="listing-account-heading">
+              <h2>Contas e variações</h2>
+              <button id="selectAllListingAccounts">Todas</button
+              ><button id="clearListingAccounts">Nenhuma</button>
+            </div>
+            <p class="hint">
+              Cada conta usa o anúncio base. Ative “Personalizar” somente nos campos que deseja
+              mudar.
+            </p>
+            <div id="listingAccounts"></div>
+          </div>
+        </div>
+        <div class="listing-bottom">
+          <span>Publicação gratuita, sem destaque e sem entrega pela OLX.</span
+          ><button id="reviewListingDetails" type="button">Revisar detalhes</button
+          ><button id="reviewListing">Publicar automaticamente</button>
+        </div>
+      </section>
+    </main>
+    <dialog id="listingReview">
+      <div class="listing-review-heading">
+        <h2>Revisar anúncios por conta</h2>
+        <button id="closeListingReview" aria-label="Fechar revisão">×</button>
+      </div>
+      <div id="listingReviewCards"></div>
+    </dialog>
+    <dialog id="renameDialog">
+      <form id="renameForm">
+        <label for="renameName">Novo nome do perfil</label
+        ><input id="renameName" maxlength="80" required />
+        <div>
+          <button type="button" id="cancelRename">Cancelar</button> <button>Salvar nome</button>
+        </div>
+      </form>
+    </dialog>
+    <footer id="status" role="status">Pronto. Nenhum site foi aberto.</footer>
+    <script src="ui.js"></script>
+    <script src="listing-ui.js"></script>
+  </body>
+</html>

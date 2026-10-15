@@ -1,0 +1,22 @@
+{
+  "name": "multiolx-browser",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "description": "Navegador desktop com sessões isoladas e chats unificados da OLX.",
+  "scripts": {
+    "setup": "node node_modules/electron/install.js",
+    "start": "electron browser/main.cjs",
+    "browser": "electron browser/main.cjs",
+    "test:browser": "node scripts/browser-self-test.mjs",
+    "test": "vitest run",
+    "check": "node scripts/check.mjs && tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.0",
+    "electron": "^44.7.2",
+    "prettier": "^3.6.2",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}

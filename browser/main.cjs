@@ -33,6 +33,7 @@ const { pageLimit, leastRecent } = require('./resources.cjs');
 const { shouldDeferResource, backgroundCSS, restoreDeferredImages } = require('./economy.cjs');
 const { createListingService } = require('./listing-service.cjs');
 const { createDeepSeek } = require('./deepseek.cjs');
+const { installComposerFocus } = require('./composer-focus.cjs');
 const webMode = process.env.MULTIOLX_WEB === '1';
 const safeStorage = webMode
   ? require('./server-vault.cjs').createServerVault(process.env.MULTIOLX_ENCRYPTION_KEY)
@@ -556,6 +557,9 @@ function acquirePage(id) {
       bindRemote(view.webContents, id);
       view.webContents.on('dom-ready', () => {
         view.economyCSS = null;
+        void view.webContents
+          .executeJavaScript(`(${installComposerFocus.toString()})()`)
+          .catch(() => {});
         void updateVisuals(view);
         void readInbox(id);
       });
@@ -1492,6 +1496,49 @@ async function start() {
     )
       throw new Error('A conversa anterior continuou aberta em segundo plano.');
     const escapePage = displayedView.webContents;
+    // A local composer clears, blurs and replaces its DOM node after Enter,
+    // reproducing the site's loss of typing focus without sending real messages.
+    win.show();
+    win.focus();
+    escapePage.focus();
+    await escapePage.executeJavaScript(`(() => {
+      document.body.dataset.focusSends='0';
+      document.addEventListener('keydown', event => {
+        if (event.target.tagName !== 'TEXTAREA' || event.key !== 'Enter' || event.shiftKey || event.isComposing) return;
+        event.preventDefault();
+        document.body.dataset.focusSends=String(Number(document.body.dataset.focusSends)+1);
+        document.body.dataset.lastSent=event.target.value;
+        const old=event.target;old.value='';old.blur();
+        setTimeout(()=>old.replaceWith(old.cloneNode(false)),20);
+      });
+      document.querySelector('textarea').focus();
+    })()`);
+    for (const message of ['Primeira mensagem local', 'Segunda mensagem local']) {
+      escapePage.insertText(message);
+      escapePage.sendInputEvent({ type: 'keyDown', keyCode: 'Enter' });
+      escapePage.sendInputEvent({ type: 'keyUp', keyCode: 'Enter' });
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      if (
+        !(await escapePage.executeJavaScript(
+          `document.activeElement === document.querySelector('textarea') && document.body.dataset.lastSent === ${JSON.stringify(message)}`,
+        ))
+      )
+        throw new Error('Enter perdeu o foco após limpar/substituir o campo de mensagem.');
+    }
+    if ((await escapePage.executeJavaScript('document.body.dataset.focusSends')) !== '2')
+      throw new Error('A preservação de foco repetiu um envio.');
+    await escapePage.executeJavaScript(`(() => {
+      const button=document.createElement('button');button.id='focus-elsewhere';button.textContent='Outro controle';document.body.append(button);
+      const input=document.querySelector('textarea');input.value='Terceira mensagem local';
+      input.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true}));
+      button.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));button.focus();
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    if (!(await escapePage.executeJavaScript("document.activeElement.id === 'focus-elsewhere'")))
+      throw new Error('A restauração de foco interferiu numa troca manual de campo.');
+    console.log(
+      'MULTIOLX_COMPOSER_FOCUS_OK: dois envios consecutivos com Enter, campo substituído e clique manual respeitado.',
+    );
     escapePage.focus();
     escapePage.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
     escapePage.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });

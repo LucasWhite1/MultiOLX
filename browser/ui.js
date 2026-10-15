@@ -185,6 +185,27 @@ el('unified').onclick = () =>
     renderInbox();
   });
 el('allChats').onclick = () => el('unified').click();
+document.addEventListener(
+  'keydown',
+  (event) => {
+    if (
+      event.key !== 'Escape' ||
+      event.defaultPrevented ||
+      event.ctrlKey ||
+      event.altKey ||
+      event.metaKey ||
+      mode !== 'unified' ||
+      !selectedKey ||
+      openingKey ||
+      document.querySelector('dialog[open], :popover-open')
+    )
+      return;
+    event.preventDefault();
+    event.stopPropagation();
+    el('unified').click();
+  },
+  true,
+);
 el('refreshInbox').onclick = () =>
   act(async () => {
     el('refreshInbox').disabled = true;
@@ -291,6 +312,10 @@ api.onState((state) => {
   if (state.profileId !== undefined) active = state.profileId;
   if (state.focusChat !== undefined) el('allChats').hidden = !state.focusChat;
   if (state.location === 'Chats unificados') el('allChats').hidden = true;
+  if (state.location === 'Chats unificados') {
+    selectedKey = null;
+    renderInbox();
+  }
   if (state.conversationKey) {
     selectedKey = state.conversationKey;
     active = state.profileId;

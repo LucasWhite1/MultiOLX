@@ -26,6 +26,8 @@ O botão **Anúncios** permite criar um conteúdo base, escolher contas e person
 
 ## Atendimento
 
+Pressione **Esc** em uma conversa aberta pelos chats unificados para voltar à lista, mesmo com o foco dentro da OLX. Voltar pelo botão ou trocar de conta também encerra o detalhe da conversa anterior: a conta permanece na lista de chats, sem manter aquela conversa aberta em segundo plano. As sessões continuam salvas.
+
 - **Ponto roxo — Não visualizada:** reproduz o indicador nativo da OLX. Atualmente a lista real informa um ponto, sem quantidade de mensagens; o aplicativo não inventa um número.
 - **Laranja — Visualizada · aguarda sua resposta:** última mensagem identificada como recebida e conversa lida.
 - **Azul / Você:** última mensagem identificada como enviada pela própria conta.
@@ -56,6 +58,6 @@ npm test
 npm run test:browser
 ```
 
-Os testes de runtime usam perfis temporários e páginas locais, sem acessar contas reais. Cobrem isolamento/restauração de sessão em outro processo, busca/filtros, leitura/autoria, seleção de conversa sem recarregar, adiamento/restauração de imagens e 8 perfis simulados com no máximo 2 páginas ativas. As capturas de teste ficam em artifacts/ e não entram no Git.
+Os testes de runtime usam perfis temporários e páginas locais, sem acessar contas reais. Cobrem isolamento/restauração de sessão em outro processo, busca/filtros, leitura/autoria, abertura de conversa pelo cliente nativo, retorno com Esc, encerramento do detalhe em segundo plano, novas mensagens não lidas após voltar, adiamento/restauração de imagens e 8 perfis simulados com no máximo 2 páginas ativas. As capturas de teste ficam em artifacts/ e não entram no Git.
 
 Detalhes: [navegador](docs/MULTIOLX-BROWSER.md), [chats unificados](docs/CHATS-UNIFICADOS.md), [desempenho](docs/NAVEGADOR-DESEMPENHO.md).

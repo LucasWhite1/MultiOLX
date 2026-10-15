@@ -215,6 +215,26 @@ async function openSession(id) {
   return ses;
 }
 function bindRemote(contents, id) {
+  contents.on('before-input-event', (event, input) => {
+    if (
+      input.type !== 'keyDown' ||
+      input.key !== 'Escape' ||
+      input.control ||
+      input.alt ||
+      input.meta
+    )
+      return;
+    if (
+      mode !== 'unified' ||
+      foregroundId ||
+      profileDialogOpen ||
+      displayedView?.webContents !== contents ||
+      !hasOpenConversation(displayedView)
+    )
+      return;
+    event.preventDefault();
+    void showUnifiedInbox().catch((error) => send({ message: error.message, error: true }));
+  });
   const guard = (event, legacyUrl, _sameDocument, legacyMainFrame) => {
     if (event.isMainFrame === false || legacyMainFrame === false) return;
     const url = event.url || legacyUrl;
@@ -282,8 +302,67 @@ function updateVisuals(view) {
   return next;
 }
 let profileDialogOpen = false;
+function hasOpenConversation(view) {
+  const entry = [...chatViews.values()].find((entry) => entry.view === view);
+  if (!entry || view.webContents.isDestroyed()) return false;
+  const url = new URL(view.webContents.getURL() || 'about:blank');
+  return (
+    entry.conversationOpen ||
+    (url.hostname === 'chat.olx.com.br' && url.searchParams.has('chat-id'))
+  );
+}
+function resetConversation(view) {
+  const pair = [...chatViews].find(([, entry]) => entry.view === view);
+  if (!pair) return Promise.resolve();
+  const [id, entry] = pair;
+  if (entry.returning) return entry.returning;
+  if (!hasOpenConversation(view)) return Promise.resolve();
+  entry.conversationOpen = false;
+  entry.generation = (entry.generation || 0) + 1;
+  entry.openDeadline = 0;
+  entry.listHistoryIndex = undefined;
+  entry.stopped = false;
+  inbox.update(id, { status: 'LOADING' });
+  // Reload the list route to unmount the conversation and its live read receipts.
+  // Hiding the native view alone leaves the OLX conversation subscribed.
+  entry.returning = view.webContents
+    .loadURL('https://chat.olx.com.br/')
+    .catch(async () => {
+      if (chatViews.get(id) !== entry) return;
+      if (!view.webContents.isDestroyed())
+        await view.webContents.loadURL('about:blank').catch(() => {});
+      if (chatViews.get(id) === entry) {
+        inbox.update(id, { status: 'ERROR' });
+        entry.stopped = true;
+      }
+    })
+    .finally(async () => {
+      entry.returning = null;
+      await readInbox(id);
+    });
+  return entry.returning;
+}
+async function showUnifiedInbox() {
+  mode = 'unified';
+  active = null;
+  display(null);
+  send({
+    mode,
+    profileId: null,
+    source: '',
+    location: 'Chats unificados',
+    back: false,
+    forward: false,
+  });
+  await Promise.all(
+    [...chatViews.values()].map((entry) => entry.returning || resetConversation(entry.view)),
+  );
+  if (!selfTest) void refreshInbox();
+  return inboxState();
+}
 function display(view) {
   const previous = displayedView;
+  if (previous && previous !== view) void resetConversation(previous);
   if (displayedView) {
     displayedView.webContents.setBackgroundThrottling(true);
     win.contentView.removeChildView(displayedView);
@@ -390,13 +469,21 @@ function publishInbox() {
 }
 async function readInbox(id) {
   const entry = chatViews.get(id);
-  if (!entry || entry.busy || entry.stopped || entry.view.webContents.isDestroyed()) return;
+  if (
+    !entry ||
+    entry.returning ||
+    entry.busy ||
+    entry.stopped ||
+    entry.view.webContents.isDestroyed()
+  )
+    return;
   if (
     entry.view.webContents.isLoadingMainFrame() &&
     !entry.view.webContents.getURL().startsWith('https://chat.olx.com.br/')
   )
     return;
   entry.busy = true;
+  const generation = entry.generation || 0;
   entry.lastRead = Date.now();
   try {
     const result = await entry.view.webContents.executeJavaScript(
@@ -404,7 +491,8 @@ async function readInbox(id) {
     );
     if (result.status === 'OPENING' && entry.openDeadline && Date.now() > entry.openDeadline)
       result.status = 'TIMEOUT';
-    if (chatViews.get(id) !== entry) return;
+    if (chatViews.get(id) !== entry || entry.returning || generation !== (entry.generation || 0))
+      return;
     if (result.detail)
       result.detail.viewed =
         entry.view === displayedView && win.isVisible() && !win.isMinimized() && win.isFocused();
@@ -412,7 +500,8 @@ async function readInbox(id) {
     if (['BLOCKED', 'LAYOUT_CHANGED', 'AUTH_REQUIRED'].includes(result.status))
       entry.stopped = true;
   } catch {
-    if (chatViews.get(id) !== entry) return;
+    if (chatViews.get(id) !== entry || entry.returning || generation !== (entry.generation || 0))
+      return;
     inbox.update(id, { status: 'ERROR' });
     entry.stopped = true;
   } finally {
@@ -437,6 +526,7 @@ function acquirePage(id) {
     .catch(() => {})
     .then(async () => {
       if (views.has(id)) {
+        if (chatViews.get(id)?.returning) await chatViews.get(id).returning;
         touched.set(id, Date.now());
         return views.get(id);
       }
@@ -477,6 +567,7 @@ async function ensureChat(id, retry = false) {
   if (!profiles.some((p) => p.id === id)) throw new Error('Perfil não encontrado.');
   let entry = chatViews.get(id);
   if (entry) {
+    if (entry.returning) await entry.returning;
     if (retry) entry.stopped = false;
     if (retry && entry.view.webContents.getURL().startsWith('https://conta.olx.com.br/')) {
       entry.stopped = false;
@@ -549,6 +640,7 @@ async function scanProfiles() {
 }
 async function waitForList(id, ms = 12000) {
   const view = await ensureChat(id);
+  if (hasOpenConversation(view)) await resetConversation(view);
   const until = Date.now() + ms;
   const entry = chatViews.get(id);
   if (
@@ -585,6 +677,7 @@ async function openConversation(key) {
     chatViews.get(conversation.profileId).listHistoryIndex =
       view.webContents.navigationHistory.getActiveIndex();
     chatViews.get(conversation.profileId).openDeadline = Date.now() + 15000;
+    chatViews.get(conversation.profileId).conversationOpen = true;
     const result = await view.webContents.executeJavaScript(
       `(${activateChatDocument.toString()})(${JSON.stringify(conversation.externalId)})`,
     );
@@ -895,12 +988,7 @@ async function start() {
   });
   registerHandler('inbox:show', async (event) => {
     trusted(event);
-    mode = 'unified';
-    active = null;
-    display(null);
-    send({ mode, source: '', location: 'Chats unificados', back: false, forward: false });
-    if (!selfTest) void refreshInbox();
-    return inboxState();
+    return showUnifiedInbox();
   });
   registerHandler('inbox:refresh', (event) => {
     trusted(event);
@@ -1198,7 +1286,7 @@ async function start() {
     sa.protocol.unhandle('https');
     console.log('BROWSER_SMOKE: testar inbox unificado');
     const fixtureChat = (label) =>
-      `<title>Chat fixture local</title><a data-testid="chat-list-item" id="same" href="?chat-id=same"><div class="w-[8px] h-[8px] bg-primary-100" style="width:8px;height:8px;visibility:${label === 'A' ? 'visible' : 'hidden'}"></div><span class="typo-caption">Produto ${label}</span><div class="text-2">Contato ${label}</div><div class="text-1-5">Mensagem ${label}</div><div class="text-1-5">12:00</div><span class="avatar">4</span><img src="https://chat.olx.com.br/fixture-image.png"></a><div id="messages"></div><script>document.querySelector('a').onclick=e=>{e.preventDefault();history.pushState(null,'',e.currentTarget.getAttribute('href'));document.querySelector('[class~="w-[8px]"]').style.visibility='hidden';document.querySelector('#messages').innerHTML='<div class="peer/bubble ${label === 'A' ? 'self-start items-start' : 'self-end items-end'}"><span class="whitespace-pre-wrap">Mensagem ${label}</span></div><textarea placeholder="Mensagem de teste local"></textarea>';};</script>`;
+      `<title>Chat fixture local</title><a data-testid="chat-list-item" id="same" href="?chat-id=same"><div class="w-[8px] h-[8px] bg-primary-100" style="width:8px;height:8px;visibility:${label === 'A' ? 'visible' : 'hidden'}"></div><span class="typo-caption">Produto ${label}</span><div class="text-2">Contato ${label}</div><div class="text-1-5">Mensagem ${label}</div><div class="text-1-5">12:00</div><span class="avatar">4</span><img src="https://chat.olx.com.br/fixture-image.png"></a><div id="messages"></div><script>if(localStorage.getItem('fixture-read'))document.querySelector('[class~="w-[8px]"]').style.visibility='hidden';document.querySelector('a').onclick=e=>{e.preventDefault();localStorage.setItem('fixture-read','1');history.pushState(null,'',e.currentTarget.getAttribute('href'));document.querySelector('[class~="w-[8px]"]').style.visibility='hidden';document.querySelector('#messages').innerHTML='<div class="peer/bubble ${label === 'A' ? 'self-start items-start' : 'self-end items-end'}"><span class="whitespace-pre-wrap">Mensagem ${label}</span></div><textarea placeholder="Mensagem de teste local"></textarea>';};</script>`;
     const chatRequests = { A: 0, B: 0 };
     const imageRequests = { A: 0, B: 0 };
     const imageResponse = () =>
@@ -1388,8 +1476,56 @@ async function start() {
     await scrollPage.executeJavaScript(
       "document.getElementById('messages').removeAttribute('style');for(const child of document.getElementById('messages').children) child.removeAttribute('style')",
     );
-    if (JSON.stringify(chatRequests) !== beforeClicks)
-      throw new Error('Selecionar uma conversa recarregou o documento completo.');
+    const beforeCounts = JSON.parse(beforeClicks);
+    if (chatRequests.A !== beforeCounts.A + 1 || chatRequests.B !== beforeCounts.B)
+      throw new Error('A troca de conta não fechou apenas a conversa anterior.');
+    const hiddenA = chatViews.get(a.id).view.webContents;
+    await chatViews.get(a.id).returning;
+    if (
+      await hiddenA.executeJavaScript(
+        "Boolean(document.querySelector('textarea')) || location.search.includes('chat-id')",
+      )
+    )
+      throw new Error('A conversa anterior continuou aberta em segundo plano.');
+    const escapePage = displayedView.webContents;
+    escapePage.focus();
+    escapePage.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
+    escapePage.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
+    for (let attempt = 0; attempt < 40; attempt++) {
+      if (!displayedView && !chatViews.get(b.id).returning) break;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    if (
+      displayedView ||
+      active ||
+      mode !== 'unified' ||
+      (await escapePage.executeJavaScript(
+        "Boolean(document.querySelector('textarea')) || location.search.includes('chat-id')",
+      ))
+    )
+      throw new Error('Esc não voltou à lista ou deixou a conversa ativa.');
+    // Simulate delivery while the account stays on its list, not in a conversation.
+    await escapePage.executeJavaScript(`(() => {
+      const open = !!document.querySelector('textarea');
+      document.querySelector('[class~="w-[8px]"]').style.visibility = open ? 'hidden' : 'visible';
+      document.querySelector('.text-1-5').textContent = 'Nova mensagem recebida';
+    })()`);
+    await readInbox(b.id);
+    if (inboxState().conversations.find((c) => c.profileId === b.id)?.attention !== 'unread')
+      throw new Error('A mensagem recebida após Esc foi marcada como visualizada.');
+    await openConversation(combined.conversations.find((c) => c.profileId === b.id).key);
+    await win.webContents.executeJavaScript(
+      `document.dispatchEvent(new KeyboardEvent('keydown', {key:'Escape', bubbles:true, cancelable:true}))`,
+    );
+    for (let attempt = 0; attempt < 40; attempt++) {
+      if (!displayedView && !chatViews.get(b.id).returning) break;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    if (displayedView) throw new Error('Esc no painel não fechou a conversa.');
+    await openConversation(combined.conversations.find((c) => c.profileId === b.id).key);
+    console.log(
+      'MULTIOLX_ESCAPE_UNREAD_OK: Esc na OLX e no painel fecha o detalhe; novas mensagens na lista permanecem não lidas.',
+    );
     await chatViews
       .get(b.id)
       .view.webContents.executeJavaScript("document.querySelector('a').remove()");
@@ -1404,6 +1540,11 @@ async function start() {
     if (displayedView !== chatViews.get(a.id).view || mode !== 'individual')
       throw new Error('O chat individual não compartilha a sessão e a página corretas.');
     await win.webContents.executeJavaScript('window.multiBrowser.unified()');
+    if (
+      hasOpenConversation(chatViews.get(a.id).view) ||
+      hasOpenConversation(chatViews.get(b.id).view)
+    )
+      throw new Error('Voltar pelo botão deixou uma conversa aberta em segundo plano.');
     await chatViews
       .get(a.id)
       .view.webContents.executeJavaScript(

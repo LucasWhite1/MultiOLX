@@ -203,6 +203,10 @@
     return inputQueue;
   };
   back.onclick = () => {
+    if (mode === 'unified' && hasView) {
+      document.getElementById('unified').click();
+      return;
+    }
     panel.hidden = true;
     document.body.classList.remove('remote-open');
   };

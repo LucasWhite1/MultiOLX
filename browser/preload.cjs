@@ -1,4 +1,8 @@
 const { contextBridge, ipcRenderer } = require('electron');
+contextBridge.exposeInMainWorld(
+  'multiServerShell',
+  process.argv.includes('--multiolx-server-shell'),
+);
 // This bridge belongs only to the packaged local toolbar, never to an OLX page.
 contextBridge.exposeInMainWorld('multiBrowser', {
   list: () => ipcRenderer.invoke('profiles:list'),

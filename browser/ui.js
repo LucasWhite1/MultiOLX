@@ -288,7 +288,7 @@ void act(async () => {
   await render();
   inbox = await api.inbox();
   renderInbox();
-  if (profiles.length) {
+  if (profiles.length && !window.multiWeb && !window.multiServerShell) {
     setMode('unified');
     inbox = await api.unified();
     renderInbox();

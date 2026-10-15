@@ -1,0 +1,18 @@
+services:
+  multiolx:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - '127.0.0.1:3000:3000'
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+      - seccomp=./deploy/chromium-seccomp.json
+    shm_size: 1gb
+    stop_grace_period: 45s
+    volumes:
+      - multiolx-data:/data
+volumes:
+  multiolx-data:

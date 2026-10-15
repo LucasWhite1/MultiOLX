@@ -4,7 +4,7 @@ const {
   WebContentsView,
   ipcMain,
   session,
-  safeStorage,
+  safeStorage: nativeSafeStorage,
   protocol,
   net,
   dialog,
@@ -33,6 +33,21 @@ const { pageLimit, leastRecent } = require('./resources.cjs');
 const { shouldDeferResource, backgroundCSS, restoreDeferredImages } = require('./economy.cjs');
 const { createListingService } = require('./listing-service.cjs');
 const { createDeepSeek } = require('./deepseek.cjs');
+const webMode = process.env.MULTIOLX_WEB === '1';
+const safeStorage = webMode
+  ? require('./server-vault.cjs').createServerVault(process.env.MULTIOLX_ENCRYPTION_KEY)
+  : nativeSafeStorage;
+const webConfiguration = webMode ? require('./web-server.cjs').configuration() : null;
+let webAccess, remoteBrowser;
+const remoteHandlers = new Map();
+function registerHandler(name, handler) {
+  ipcMain.handle(name, handler);
+  remoteHandlers.set(name, handler);
+}
+function notify(channel, state) {
+  if (win && !win.isDestroyed()) win.webContents.send(channel, state);
+  webAccess?.emit(channel, state);
+}
 let walkthroughOwner = null;
 let listingService;
 process.on('uncaughtExceptionMonitor', (error) => {
@@ -47,6 +62,8 @@ process.on('uncaughtExceptionMonitor', (error) => {
 app.setName('MultiOLX Browser');
 if (process.platform === 'win32') app.setAppUserModelId('br.multiolx.browser');
 app.enableSandbox();
+// Use Chromium's user-namespace sandbox in the VPS container; the legacy SUID helper is not used.
+if (webMode && process.platform === 'linux') app.commandLine.appendSwitch('disable-setuid-sandbox');
 // A private app directory; never open, edit or copy a personal Chrome profile.
 const root =
   process.env.MULTIOLX_BROWSER_DATA_DIR || path.join(app.getPath('appData'), 'MultiOLX Browser');
@@ -100,7 +117,7 @@ const preferences = {
   allowRunningInsecureContent: false,
 };
 const send = (state) => {
-  if (win && !win.isDestroyed()) win.webContents.send('browser:state', state);
+  notify('browser:state', { ...state, hasView: !!displayedView });
 };
 function trusted(event) {
   if (
@@ -296,7 +313,7 @@ function publishInbox() {
     if (signature !== inboxKey) {
       inboxKey = signature;
       inboxDirty = true;
-      win.webContents.send('inbox:state', state);
+      notify('inbox:state', state);
     }
     if (
       process.argv.includes('--verify-conversation') &&
@@ -605,6 +622,10 @@ function publicLocation(url) {
   }
 }
 function resize() {
+  if (webMode) {
+    if (displayedView) displayedView.setBounds({ x: 0, y: 0, width: 1100, height: 780 });
+    return;
+  }
   if (displayedView) {
     const [width, height] = win.getContentSize();
     const focusChat = mode === 'unified' && width < 1500;
@@ -695,11 +716,15 @@ async function start() {
   win = new BrowserWindow({
     width: 1380,
     height: 900,
-    minWidth: 1000,
-    minHeight: 650,
+    minWidth: webMode ? 360 : 1000,
+    minHeight: webMode ? 320 : 650,
     show: false,
     title: 'MultiOLX Browser',
-    webPreferences: { ...preferences, preload: path.join(__dirname, 'preload.cjs') },
+    webPreferences: {
+      ...preferences,
+      preload: path.join(__dirname, 'preload.cjs'),
+      additionalArguments: webMode ? ['--multiolx-server-shell'] : [],
+    },
   });
   win.webContents.on('will-navigate', (event) => event.preventDefault());
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
@@ -710,14 +735,14 @@ async function start() {
     ai: listingAI,
     parallelLimit: () => maxPages,
     batchChanged: (state) => {
-      if (win && !win.isDestroyed()) win.webContents.send('listings:batch', state);
+      if (win && !win.isDestroyed()) notify('listings:batch', state);
     },
     publisherStatus: (message) => send({ message }),
     root,
     atomic,
     safeStorage,
     secureStorage,
-    ipcMain,
+    ipcMain: { handle: registerHandler },
     dialog,
     nativeImage,
     trusted,
@@ -819,11 +844,11 @@ async function start() {
       app.quit();
     }
   });
-  ipcMain.handle('profiles:list', (event) => {
+  registerHandler('profiles:list', (event) => {
     trusted(event);
     return profiles;
   });
-  ipcMain.handle('profiles:create', async (event, name) => {
+  registerHandler('profiles:create', async (event, name) => {
     trusted(event);
     const profile = createProfile(name);
     profiles.push(profile);
@@ -835,7 +860,7 @@ async function start() {
     }
     return profile;
   });
-  ipcMain.handle('profiles:rename', async (event, id, name) => {
+  registerHandler('profiles:rename', async (event, id, name) => {
     trusted(event);
     const profile = profiles.find((p) => p.id === profileId(id));
     if (!profile) throw new Error('Perfil não encontrado.');
@@ -849,16 +874,16 @@ async function start() {
     }
     return profile;
   });
-  ipcMain.handle('profiles:open', async (event, id) => {
+  registerHandler('profiles:open', async (event, id) => {
     trusted(event);
     await open(id);
     return { ok: true };
   });
-  ipcMain.handle('inbox:state', (event) => {
+  registerHandler('inbox:state', (event) => {
     trusted(event);
     return inboxState();
   });
-  ipcMain.handle('inbox:show', async (event) => {
+  registerHandler('inbox:show', async (event) => {
     trusted(event);
     mode = 'unified';
     active = null;
@@ -867,15 +892,15 @@ async function start() {
     if (!selfTest) void refreshInbox();
     return inboxState();
   });
-  ipcMain.handle('inbox:refresh', (event) => {
+  registerHandler('inbox:refresh', (event) => {
     trusted(event);
     return refreshInbox();
   });
-  ipcMain.handle('inbox:open', async (event, key) => {
+  registerHandler('inbox:open', async (event, key) => {
     trusted(event);
     return openConversation(key);
   });
-  ipcMain.handle('browser:budget', async (event, value) => {
+  registerHandler('browser:budget', async (event, value) => {
     trusted(event);
     if (value !== undefined) {
       const before = maxPages;
@@ -901,7 +926,7 @@ async function start() {
     publishInbox();
     return { limit: maxPages, activePages: views.size };
   });
-  ipcMain.handle('browser:economy', async (event, value) => {
+  registerHandler('browser:economy', async (event, value) => {
     trusted(event);
     if (typeof value !== 'boolean') throw new Error('Modo de economia inválido.');
     await atomic(path.join(root, 'settings.json'), JSON.stringify({ maxPages, economy: value }));
@@ -910,7 +935,7 @@ async function start() {
     publishInbox();
     return { economy };
   });
-  ipcMain.handle('profiles:close', async (event) => {
+  registerHandler('profiles:close', async (event) => {
     trusted(event);
     if (!active) return { ok: true };
     const id = active;
@@ -937,7 +962,7 @@ async function start() {
     });
     return { ok: true };
   });
-  ipcMain.handle('browser:navigate', async (event, action) => {
+  registerHandler('browser:navigate', async (event, action) => {
     trusted(event);
     if (listingService?.isWorker(active))
       throw new Error('Esta conta está publicando. Aguarde a conclusão.');
@@ -972,6 +997,63 @@ async function start() {
   });
   await win.loadURL(localOrigin + '/index.html');
   if (!selfTest) win.show();
+  if (webMode) {
+    remoteBrowser = require('./remote-browser.cjs').createRemoteBrowser({
+      window: () => win,
+      view: () => displayedView,
+      popups,
+      owner: () => active,
+      busy: (id) => listingService.isWorker(id),
+    });
+    webAccess = await require('./web-server.cjs').createWebServer({
+      config: webConfiguration,
+      invoke: async (channel, args) => {
+        const handler = remoteHandlers.get(channel);
+        if (!handler) throw Error('Operação indisponível.');
+        return handler(
+          { sender: win.webContents, senderFrame: win.webContents.mainFrame },
+          ...args,
+        );
+      },
+      snapshot: () => ({
+        mode,
+        profileId: active || null,
+        source: profiles.find((p) => p.id === active)?.name || '',
+        hasView: !!displayedView,
+        location: displayedView
+          ? publicLocation(displayedView.webContents.getURL())
+          : mode === 'listings'
+            ? 'Anúncios'
+            : mode === 'unified'
+              ? 'Chats unificados'
+              : 'Nenhum perfil aberto',
+      }),
+      batch: () => listingService.batchState(),
+      photos: async (files) => {
+        if (listingService.batchActive())
+          throw Error('Aguarde a publicação antes de importar fotos.');
+        const temporary = await fs.mkdtemp(path.join(root, 'upload-'));
+        try {
+          const sources = [];
+          for (const file of files) {
+            const source = path.join(temporary, randomUUID() + path.extname(file.name).slice(0, 8));
+            await fs.writeFile(source, Buffer.from(file.data, 'base64'), { mode: 0o600 });
+            sources.push(source);
+          }
+          return await listingService.importPhotos(sources);
+        } finally {
+          for (const name of await fs.readdir(temporary)) await fs.rm(path.join(temporary, name));
+          await fs.rmdir(temporary);
+        }
+      },
+      frame: () => remoteBrowser.frame(),
+      input: (command) => remoteBrowser.input(command),
+    });
+    console.log('MULTIOLX_WEB_READY port=' + webAccess.port);
+    const shutdown = () => app.quit();
+    process.on('SIGTERM', shutdown);
+    process.on('SIGINT', shutdown);
+  }
   saveTimer = setInterval(
     () =>
       void flushAll().catch(() =>
@@ -1006,7 +1088,7 @@ async function start() {
         1024,
     );
     if (!win.isDestroyed())
-      win.webContents.send('browser:resources', {
+      notify('browser:resources', {
         memoryMB,
         activePages: views.size,
         limit: maxPages,
@@ -1579,15 +1661,38 @@ async function start() {
     if (assisted.pending.length || !assisted.compatible || assisted.changes.length !== 2)
       throw new Error('As características por IA não foram aplicadas às opções públicas.');
     sb.protocol.unhandle('https');
-    const {attributePortalFixture}=require('../scripts/listing-attribute-portal-fixture.cjs');
-    sb.protocol.handle('https',()=>new Response(attributePortalFixture(),{headers:{'Content-Type':'text/html;charset=utf-8'}}));
+    const { attributePortalFixture } = require('../scripts/listing-attribute-portal-fixture.cjs');
+    sb.protocol.handle(
+      'https',
+      () =>
+        new Response(attributePortalFixture(), {
+          headers: { 'Content-Type': 'text/html;charset=utf-8' },
+        }),
+    );
     await wizardContents.loadURL('https://www2.olx.com.br/desapega');
-    const portalResult=await fillAttributes({condition:'Novo'},{
-      assertActive:()=>{},pause:ms=>new Promise(r=>setTimeout(r,ms)),
-      dom:command=>wizardContents.executeJavaScript(`(${attributeDocument.toString()})(${JSON.stringify(command)})`),
-      choose:async(_product,field)=>({option:field.id.endsWith('_type')?'Boombox':field.id.endsWith('_brand')?'Outros':'Novo',compatible:true}),
-    });
-    if(portalResult.pending.length || portalResult.changes.length!==3)throw Error('Seletores com portal e cópias ocultas falharam: '+JSON.stringify(portalResult));
+    const portalResult = await fillAttributes(
+      { condition: 'Novo' },
+      {
+        assertActive: () => {},
+        pause: (ms) => new Promise((r) => setTimeout(r, ms)),
+        dom: (command) =>
+          wizardContents.executeJavaScript(
+            `(${attributeDocument.toString()})(${JSON.stringify(command)})`,
+          ),
+        choose: async (_product, field) => ({
+          option: field.id.endsWith('_type')
+            ? 'Boombox'
+            : field.id.endsWith('_brand')
+              ? 'Outros'
+              : 'Novo',
+          compatible: true,
+        }),
+      },
+    );
+    if (portalResult.pending.length || portalResult.changes.length !== 3)
+      throw Error(
+        'Seletores com portal e cópias ocultas falharam: ' + JSON.stringify(portalResult),
+      );
     console.log(
       'MULTIOLX_LISTING_AI_OK: opções dependentes, seleção pública e conferência de valores com IA simulada.',
     );
@@ -1704,6 +1809,21 @@ async function start() {
       'MULTIOLX_LISTINGS_OK: herança, variações, revisão de duas contas, fotos, preparo sem publicar e envio explícito sem repetição.',
     );
     app.quit();
+  }
+  if (
+    webMode &&
+    (process.argv.includes('--web-self-test') || process.argv.includes('--web-restore-test'))
+  ) {
+    await require('./web-smoke.cjs').runWebSmoke({
+      app,
+      BrowserWindow,
+      root,
+      port: webAccess.port,
+      openSession,
+      views,
+      nativeImage,
+      restore: process.argv.includes('--web-restore-test'),
+    });
   }
   if (process.argv.includes('--self-test-restore')) {
     const id = profiles[0]?.id;
@@ -2070,6 +2190,7 @@ else {
     event.preventDefault();
     quitting = true;
     listingService?.cancel();
+    void webAccess?.close();
     clearInterval(saveTimer);
     clearInterval(inboxTimer);
     scanQueue = [];

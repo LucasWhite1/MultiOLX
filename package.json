@@ -10,13 +10,18 @@
     "browser": "electron browser/main.cjs",
     "test:browser": "node scripts/browser-self-test.mjs",
     "test": "vitest run",
-    "check": "node scripts/check.mjs && tsc --noEmit"
+    "check": "node scripts/check.mjs && tsc --noEmit",
+    "credentials": "node scripts/generate-credentials.mjs",
+    "test:web": "node scripts/web-self-test.mjs",
+    "test:docker": "node scripts/docker-self-test.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.10.0",
-    "electron": "^44.7.2",
     "prettier": "^3.6.2",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4"
+  },
+  "dependencies": {
+    "electron": "^44.7.2"
   }
 }

@@ -180,11 +180,15 @@ function createListingService(options) {
       filters: [{ name: 'Fotos', extensions: ['jpg', 'jpeg', 'png', 'webp'] }],
     });
     if (result.canceled) return [];
-    if (result.filePaths.length > 20) throw new Error('Selecione até 20 fotos por vez.');
+    return importPhotos(result.filePaths);
+  });
+  async function importPhotos(filePaths) {
+    if (batchActive()) throw Error('Aguarde a publicação antes de importar fotos.');
+    if (filePaths.length > 20) throw new Error('Selecione até 20 fotos por vez.');
     return mutate(async () => {
       const imported = [];
       await fs.mkdir(directory, { recursive: true, mode: 0o700 });
-      for (const source of result.filePaths) {
+      for (const source of filePaths) {
         if ((await fs.stat(source)).size > 20 * 1024 * 1024)
           throw new Error('Uma foto excede 20 MB. Escolha uma versão menor.');
         const image = nativeImage.createFromBuffer(await fs.readFile(source));
@@ -241,7 +245,7 @@ function createListingService(options) {
       }
       return imported;
     });
-  });
+  }
   handle('listings:prepare', async (id, owner, revision) => {
     await queue.catch(() => {});
     const draft = catalog.find(id);
@@ -716,6 +720,7 @@ function createListingService(options) {
     checkBackground: (id) => startBatch(id, catalog.find(id).revision, true),
     diagnostics: () => [...diagnostics],
     photoPayload,
+    importPhotos,
     verifyPublished: async (id, owner, contents) => {
       await queue.catch(() => {});
       const item = catalog.review(id, profiles()).find((i) => i.profileId === owner);

@@ -16,6 +16,10 @@ No Windows, também pode abrir **Abrir MultiOLX Browser.cmd** depois da instala�
 
 Crie um perfil por conta, selecione-o e faça login diretamente na OLX. **Chats unificados** reúne as conversas; os botões dos perfis mantêm o acesso individual. A sessão de cada conta fica em uma partição própria, independente do Chrome pessoal. Fechar uma página para economizar memória preserva a sessão; sair da OLX, expiração ou revogação podem exigir novo login.
 
+## VPS e celular
+
+A versão web usa login e senha, interface responsiva e os navegadores executando no servidor. A implantação está preparada com Dockerfile, volume persistente, healthcheck e configuração do Easypanel. Consulte [o guia completo](docs/VPS-EASYPANEL.md). Gere suas credenciais com `npm run credentials`; elas ficam no arquivo privado `data/vps-credentials.txt` e não são enviadas ao Git.
+
 ## Anúncios
 
 O botão **Anúncios** permite criar um conteúdo base, escolher contas e personalizar apenas os campos desejados. Inclui fotos compartilhadas, rascunhos criptografados, revisão por conta e preparo assistido no formulário da OLX. O botão Publicar envia automaticamente nas contas selecionadas, com até duas contas em paralelo, publicação gratuita e entrega pela OLX desmarcada. Cada conta mostra seu próprio progresso e resultado. Veja [o fluxo e os limites](docs/ANUNCIOS.md).

@@ -8,3 +8,9 @@ test-results/
 artifacts/
 olx-conexao-verificada.png
 legacy-panel/
+
+.env.*
+!.env.example
+*.enc
+*.pem
+*.key

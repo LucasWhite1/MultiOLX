@@ -55,7 +55,11 @@
           draft.deliveries = result.deliveries;
           savedVersion = version;
           notice(
-            version === editVersion ? 'Rascunho salvo neste computador.' : 'Alterações pendentes…',
+            version === editVersion
+              ? window.multiWeb
+                ? 'Rascunho salvo no servidor.'
+                : 'Rascunho salvo neste computador.'
+              : 'Alterações pendentes…',
           );
         }
         const index = data.drafts.findIndex((d) => d.id === id);
@@ -253,7 +257,7 @@
     $('draftPicker').value = draft.id;
     renderAccounts();
     renderPhotos();
-    notice('Rascunho salvo neste computador.');
+    notice(window.multiWeb ? 'Rascunho salvo no servidor.' : 'Rascunho salvo neste computador.');
   }
   async function open() {
     data = await api.listings();

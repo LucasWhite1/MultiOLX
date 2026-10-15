@@ -1,0 +1,11 @@
+import { randomBytes } from 'node:crypto';
+import { writeFile, mkdir } from 'node:fs/promises';
+import { createRequire } from 'node:module';
+import path from 'node:path';
+const { passwordHash } = createRequire(import.meta.url)('../browser/server-vault.cjs');
+const destination = path.resolve(process.argv[2] || 'data/vps-credentials.txt');
+const password = randomBytes(18).toString('base64url');
+const content = `MultiOLX — guarde este arquivo fora do Git.\n\nUsuário: admin\nSenha de acesso: ${password}\n\nVariáveis do Easypanel:\nMULTIOLX_ADMIN_USER=admin\nMULTIOLX_ADMIN_PASSWORD_HASH=${passwordHash(password)}\nMULTIOLX_ENCRYPTION_KEY=${randomBytes(32).toString('hex')}\nMULTIOLX_PUBLIC_URL=https://multiolx.seudominio.com.br\nPORT=3000\n\nNão gere outra chave de criptografia após cadastrar contas. Perder a chave impede recuperar o cofre.\n`;
+await mkdir(path.dirname(destination), { recursive: true, mode: 0o700 });
+await writeFile(destination, content, { mode: 0o600, flag: 'wx' });
+console.log('Credenciais geradas em ' + destination + '. Nenhum segredo foi exibido no terminal.');

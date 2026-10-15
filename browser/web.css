@@ -1,0 +1,319 @@
+.login-page {
+  margin: 0;
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  background: #f5f3ff;
+  color: #263043;
+  font-family: system-ui, sans-serif;
+  padding: 20px;
+  box-sizing: border-box;
+}
+.login-card {
+  width: min(100%, 390px);
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 18px;
+  padding: 30px;
+  box-sizing: border-box;
+  box-shadow: 0 12px 40px #49209b12;
+}
+.login-brand {
+  font-size: 25px;
+  font-weight: 800;
+  color: #7c3aed;
+}
+.login-card h1 {
+  font-size: 24px;
+  margin-bottom: 8px;
+}
+.login-card p {
+  font-size: 14px;
+  color: #687184;
+  line-height: 1.5;
+}
+.login-card form {
+  display: grid;
+  gap: 12px;
+  margin-top: 24px;
+}
+.login-card input,
+.login-card button {
+  font: inherit;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid #dce0e9;
+  min-width: 0;
+}
+.login-card button {
+  background: #7c3aed;
+  color: white;
+  cursor: pointer;
+}
+.login-card #loginError {
+  color: #b42318;
+  min-height: 20px;
+}
+.mobile-menu {
+  display: none;
+}
+.web-app aside {
+  overflow-y: auto;
+}
+.remote-tools,
+.remote-typing,
+.remote-keys {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 8px 0;
+}
+.remote-typing input {
+  flex: 1;
+  min-width: 120px;
+  font-size: 16px;
+}
+.web-app main {
+  overflow: auto;
+}
+.web-app #remoteBrowser {
+  position: absolute;
+  inset: 56px 0 0;
+  background: #fff;
+  z-index: 3;
+  padding: 8px;
+  overflow: auto;
+}
+.web-app #remoteBrowser[hidden] {
+  display: none;
+}
+.web-app.remote-open .welcome,
+.web-app.remote-open #unifiedInbox {
+  visibility: hidden;
+}
+#remoteImage {
+  display: block;
+  width: 100%;
+  height: auto;
+  outline: none;
+  touch-action: pan-x;
+  cursor: pointer;
+  border: 1px solid #e5e7eb;
+}
+.web-app footer {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.remote-keys button {
+  min-width: 44px;
+}
+.remote-tools button {
+  font-size: 12px;
+}
+@media (max-width: 760px) {
+  .web-app header {
+    height: auto;
+    min-height: 64px;
+    padding: 10px;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .web-app .brand small,
+  .web-app #resourceStats,
+  .web-app .economy-label,
+  .web-app .resource-controls label {
+    display: none;
+  }
+  .web-app .brand span {
+    font-size: 16px;
+  }
+  .web-app .brand {
+    font-size: 21px;
+    gap: 6px;
+  }
+  .mobile-menu {
+    display: block;
+  }
+  .web-app .resource-controls {
+    margin-left: 0;
+    gap: 6px;
+  }
+  .web-app #webLogout {
+    margin-left: auto;
+  }
+  .web-app aside {
+    display: none;
+    position: fixed;
+    top: 68px;
+    bottom: 32px;
+    width: min(88vw, 300px);
+    z-index: 20;
+    box-shadow: 4px 8px 30px #0002;
+  }
+  .web-app.menu-open aside {
+    display: block;
+  }
+  .web-app main {
+    left: 0;
+    top: 116px;
+    bottom: 32px;
+  }
+  .web-app main > nav {
+    height: 56px;
+    overflow-x: auto;
+    gap: 5px;
+    white-space: nowrap;
+    padding: 6px;
+  }
+  .web-app nav button {
+    padding: 8px;
+  }
+  .web-app #location {
+    display: none;
+  }
+  .web-app #listingWorkspace {
+    padding: 14px;
+    inset: 56px 0 0;
+    overflow-y: auto;
+  }
+  .web-app .listing-workspace-heading {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .web-app .listing-workspace-heading > div {
+    width: 100%;
+  }
+  .web-app .listing-workspace-heading select {
+    max-width: 100%;
+    flex: 1;
+  }
+  .web-app .listing-grid,
+  .web-app .listing-fields,
+  .web-app .listing-pair {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .web-app .listing-bottom {
+    flex-wrap: wrap;
+    gap: 10px;
+    position: static;
+  }
+  .web-app .listing-bottom button {
+    flex: 1;
+  }
+  .web-app #unifiedInbox {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .web-app .inbox-list {
+    width: 100%;
+    min-width: 0;
+    border-right: 0;
+  }
+  .web-app .conversation-placeholder {
+    display: none;
+  }
+  .web-app #listingBatchTitle {
+    line-height: 1.6;
+  }
+  .web-app dialog {
+    max-width: calc(100vw - 20px);
+    max-height: 90dvh;
+  }
+  .web-app .listing-review-card {
+    min-width: 0;
+  }
+  .web-app input,
+  .web-app textarea,
+  .web-app select {
+    font-size: 16px;
+  }
+  .web-app #remoteBrowser {
+    inset: 56px 0 0;
+  }
+  .web-app .remote-tools button {
+    flex: 1;
+  }
+  .web-app .remote-typing {
+    position: sticky;
+    bottom: 0;
+    background: #fff;
+    padding: 8px 0;
+  }
+  .web-app .listing-panel {
+    padding: 14px;
+  }
+  .web-app #inboxFilters {
+    max-width: calc(100vw - 24px);
+  }
+}
+.web-app {
+  height: 100dvh;
+  overflow: hidden;
+  --header-height: 64px;
+}
+.web-app aside {
+  top: var(--header-height);
+}
+.web-app main {
+  position: absolute;
+  inset: var(--header-height) 0 32px 232px;
+  margin: 0;
+  overflow: hidden;
+}
+.web-app #listingWorkspace,
+.web-app #unifiedInbox {
+  inset: 56px 0 0;
+}
+.web-app #listingWorkspace {
+  overflow-y: auto;
+}
+.web-app .welcome {
+  padding: 50px 20px;
+}
+.web-app main > nav {
+  overflow-x: auto;
+  white-space: nowrap;
+}
+.web-app .listing-columns {
+  min-width: 0;
+}
+.web-app .listing-field-pair {
+  min-width: 0;
+}
+@media (max-width: 760px) {
+  .web-app main {
+    left: 0;
+  }
+  .web-app aside {
+    top: var(--header-height);
+  }
+  .web-app .listing-columns,
+  .web-app .listing-field-pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .web-app #unifiedInbox {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .web-app #listingWorkspace {
+    padding: 14px;
+  }
+  .web-app .welcome {
+    padding: 32px 16px;
+  }
+  .web-app .listing-bottom {
+    display: flex;
+  }
+  .web-app #backListings,
+  .web-app #allChats {
+    font-size: 12px;
+  }
+  .web-app .account-tag {
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .web-app .remote-tools {
+    margin-top: 0;
+  }
+}

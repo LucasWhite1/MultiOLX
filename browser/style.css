@@ -743,6 +743,41 @@ aside {
   font-size: 13px;
   line-height: 1.6;
 }
+.listing-cover-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+}
+.listing-cover-option input {
+  width: auto;
+  flex: none;
+}
+#listingCoverPreview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+.listing-cover-preview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  max-width: 100%;
+}
+.listing-cover-preview span {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.listing-cover-preview img {
+  width: 44px;
+  height: 44px;
+  object-fit: cover;
+  border-radius: 6px;
+  flex: none;
+}
 .listing-review-photos {
   display: flex;
   gap: 6px;

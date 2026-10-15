@@ -64,7 +64,13 @@ function fields(value, partial = false) {
   return result;
 }
 function resolveListing(draft, owner) {
-  return { ...draft.base, ...draft.overrides[owner], photos: [...draft.photos] };
+  const photos = [...draft.photos];
+  const index = draft.targets.indexOf(owner);
+  if (draft.rotateCover === true && photos.length > 1 && index >= 0) {
+    const offset = index % photos.length;
+    photos.unshift(...photos.splice(offset, 1));
+  }
+  return { ...draft.base, ...draft.overrides[owner], photos };
 }
 function fingerprint(value) {
   return createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -101,6 +107,7 @@ class ListingCatalog {
       overrides: {},
       targets: [],
       photos: [],
+      rotateCover: false,
       deliveries: {},
       createdAt: now,
       updatedAt: now,
@@ -133,6 +140,8 @@ class ListingCatalog {
     )
       throw new Error('Seleção de fotos inválida.');
     const overrides = {};
+    if (input.rotateCover !== undefined && typeof input.rotateCover !== 'boolean')
+      throw new Error('Opção de alternar foto principal inválida.');
     if (!input.overrides || typeof input.overrides !== 'object' || Array.isArray(input.overrides))
       throw new Error('Variações inválidas.');
     for (const [id, value] of Object.entries(input.overrides)) {
@@ -145,6 +154,7 @@ class ListingCatalog {
       overrides,
       targets: [...input.targets],
       photos: [...input.photos],
+      rotateCover: input.rotateCover === true,
       revision: previous.revision + 1,
       updatedAt: new Date().toISOString(),
       deliveries: { ...previous.deliveries },

@@ -1474,7 +1474,17 @@ async function start() {
         .toPNG(),
     );
     const originalDialog = dialog.showOpenDialog;
-    dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [photoFile] });
+    const secondPhotoFile = path.join(root, 'test-photo-second.png');
+    await fs.writeFile(
+      secondPhotoFile,
+      nativeImage
+        .createFromBitmap(Buffer.alloc(100 * 100 * 4, 128), { width: 100, height: 100 })
+        .toPNG(),
+    );
+    dialog.showOpenDialog = async () => ({
+      canceled: false,
+      filePaths: [photoFile, secondPhotoFile],
+    });
     let assets;
     try {
       assets = await win.webContents.executeJavaScript('window.multiBrowser.pickListingPhotos()');
@@ -1497,10 +1507,28 @@ async function start() {
     );
     await win.webContents.executeJavaScript('window.multiListings.open()');
     await win.webContents.executeJavaScript(
+      "document.getElementById('rotateListingCover').click()",
+    );
+    await win.webContents.executeJavaScript(
       "document.getElementById('listing-description').value='Descrição base atualizada';document.getElementById('listing-description').dispatchEvent(new Event('input'))",
     );
     await win.webContents.executeJavaScript('window.multiListings.save()');
     listing = listingService.catalog.find(listing.id);
+    const firstPhotos = await listingService.photoPayload(listing.id, a.id);
+    const secondPhotos = await listingService.photoPayload(listing.id, b.id);
+    if (
+      !listing.rotateCover ||
+      firstPhotos.length !== 2 ||
+      secondPhotos[0].data !== firstPhotos[1].data ||
+      secondPhotos[1].data !== firstPhotos[0].data ||
+      !(await win.webContents.executeJavaScript(
+        "document.querySelectorAll('.listing-cover-preview').length === 2",
+      ))
+    )
+      throw new Error('Alternância de capa não chegou às fotos enviadas ou à prévia.');
+    console.log(
+      'MULTIOLX_COVER_ROTATION_OK: opção salva, prévia por conta e fotos de envio na ordem correta.',
+    );
     const reviewed = listingService.catalog.review(listing.id, profiles);
     if (
       reviewed[0].listing.description !== 'Descrição base atualizada' ||
@@ -1544,7 +1572,7 @@ async function start() {
     const publisher = views.get(a.id).webContents;
     if (
       !(await publisher.executeJavaScript(
-        "document.getElementById('body').value==='Descrição base atualizada' && document.querySelector('input[type=file]').files.length===1 && !document.body.dataset.sent",
+        "document.getElementById('body').value==='Descrição base atualizada' && document.querySelector('input[type=file]').files.length===2 && !document.body.dataset.sent",
       ))
     )
       throw new Error('Preparar publicou ou perdeu dados do anúncio.');

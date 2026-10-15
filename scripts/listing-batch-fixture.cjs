@@ -13,6 +13,6 @@ function batchFixture(url) {
     if (page.searchParams.has('done')) return '<h1>Anúncio enviado com sucesso!</h1>';
     return `<label><input type="radio" name="offer" aria-label="NO_PRODUCT">Anunciar sem destacar</label><label><input type="radio" name="offer" aria-label="PACKAGE_GOLD" checked>Destaque pago</label><button onclick="if(document.querySelector('[aria-label=NO_PRODUCT]').checked&&!document.querySelector('[aria-label=PACKAGE_GOLD]').checked)location.search+='&done=1'">Finalizar anúncio</button>`;
   }
-  return `<input id="subject"><textarea id="body"></textarea><input id="price"><input id="zipcode"><input type="file" accept="image/*"><button onclick="if(document.getElementById('subject').value&&document.getElementById('body').value&&document.querySelector('[type=file]').files.length)location.href='https://olx-pay.olx.com.br/aderir'">Continuar</button>`;
+  return `<input id="subject"><textarea id="body"></textarea><input id="price"><input id="zipcode"><input type="file" accept="image/*" multiple><button onclick="if(document.getElementById('subject').value&&document.getElementById('body').value&&document.querySelector('[type=file]').files.length)location.href='https://olx-pay.olx.com.br/aderir'">Continuar</button>`;
 }
 module.exports = { batchFixture };

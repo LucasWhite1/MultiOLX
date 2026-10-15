@@ -85,7 +85,28 @@
     const count = draft?.targets.length || 0;
     $('reviewListing').textContent = `Publicar em ${count} conta${count === 1 ? '' : 's'}`;
     $('reviewListing').disabled = !count;
+    renderCoverPreview();
   }
+  function renderCoverPreview() {
+    $('listingCoverPreview').replaceChildren();
+    if (!draft?.rotateCover || !draft.photos.length) return;
+    for (const [index, owner] of draft.targets.entries()) {
+      const profile = data.profiles.find((p) => p.id === owner);
+      const photoIndex = index % draft.photos.length;
+      const row = node('div', undefined, 'listing-cover-preview');
+      row.append(
+        thumbnail(draft.photos[photoIndex]),
+        node('span', `${profile?.name || 'Conta'} · Foto ${photoIndex + 1}`),
+      );
+      $('listingCoverPreview').append(row);
+    }
+  }
+  $('rotateListingCover').onchange = () => {
+    if (!draft) return;
+    draft.rotateCover = $('rotateListingCover').checked;
+    changed();
+    renderCoverPreview();
+  };
   function renderPhotos() {
     $('listingPhotos').replaceChildren(
       ...draft.photos.map((id, index) => {
@@ -119,6 +140,7 @@
       }),
     );
     $('photoCount').textContent = `${draft.photos.length}/20 fotos`;
+    renderCoverPreview();
   }
   function renderAccounts() {
     const expanded = new Set(
@@ -248,6 +270,7 @@
   }
   function loadDraft(value) {
     draft = structuredClone(value);
+    $('rotateListingCover').checked = draft.rotateCover === true;
     editVersion = 0;
     savedVersion = 0;
     for (const field of Object.keys(labels)) $('listing-' + field).value = draft.base[field];

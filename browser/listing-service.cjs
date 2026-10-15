@@ -1,7 +1,7 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
-const { ListingCatalog } = require('./listings.cjs');
+const { ListingCatalog, resolveListing } = require('./listings.cjs');
 const { profileId } = require('./policy.cjs');
 const {
   inspectListingForm,
@@ -329,7 +329,7 @@ function createListingService(options) {
                 options: state.categoryOptions,
               },
               'Escolha uma categoria ou subcategoria da lista que contenha este produto.',
-              await photoPayload(p.id),
+              await photoPayload(p.id, p.owner),
             );
             assertActive();
             if (!options.ai.status().enabled) throw new Error('IA desativada.');
@@ -358,14 +358,14 @@ function createListingService(options) {
                 return result;
               },
               choose: async (product, field) => {
-                photos ||= await photoPayload(p.id);
+                photos ||= await photoPayload(p.id, p.owner);
                 return options.ai.choose(product, field, state.categoryText, photos);
               },
             });
           }
         : undefined,
       fill: (listing) => execute(fillListingForm, listing),
-      photos: async () => execute(attachListingPhotos, await photoPayload(p.id)),
+      photos: async () => execute(attachListingPhotos, await photoPayload(p.id, p.owner)),
       advance: () => execute(advanceListingForm),
       selectFree: () => execute(selectFreeListing),
       onboarding: async () => {
@@ -527,10 +527,10 @@ function createListingService(options) {
       message: 'Envio solicitado. Confira o resultado em Meus anúncios antes de repetir.',
     };
   });
-  async function photoPayload(id) {
+  async function photoPayload(id, owner) {
     const draft = catalog.find(id),
       photos = [];
-    for (const assetId of draft.photos) {
+    for (const assetId of resolveListing(draft, owner).photos) {
       const asset = assets.get(assetId);
       if (!asset) throw new Error('Foto ausente.');
       const body = JSON.parse(

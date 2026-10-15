@@ -7,6 +7,66 @@ const profiles = [
   { id: crypto.randomUUID(), name: 'A' },
   { id: crypto.randomUUID(), name: 'B' },
 ];
+it.each([
+  [2, 2, [0, 1]],
+  [2, 4, [0, 1, 0, 1]],
+  [10, 3, [0, 1, 2]],
+  [1, 3, [0, 0, 0]],
+  [0, 2, []],
+])('distribui %i fotos entre %i contas sem perder fotos', (photoCount, accountCount, covers) => {
+  const catalog = new ListingCatalog();
+  const accounts = Array.from({ length: accountCount }, (_, i) => ({
+    id: crypto.randomUUID(),
+    name: `Conta ${i}`,
+  }));
+  const photos = Array.from({ length: photoCount }, () => crypto.randomUUID());
+  const saved = catalog.save(
+    {
+      ...catalog.create(),
+      photos,
+      targets: accounts.map((p) => p.id),
+      rotateCover: true,
+    },
+    accounts,
+    new Set(photos),
+  );
+  const listings = catalog.review(saved.id, accounts).map((item: any) => item.listing);
+  expect(listings.flatMap((listing: any) => listing.photos.slice(0, 1))).toEqual(
+    covers.map((index) => photos[index]),
+  );
+  for (const listing of listings) {
+    expect(new Set(listing.photos)).toEqual(new Set(photos));
+    expect(listing.photos).toHaveLength(photos.length);
+    expect(resolveListing(saved, accounts[listings.indexOf(listing)].id)).toEqual(listing);
+  }
+  expect(saved.photos).toEqual(photos);
+});
+it('mantém a opção desligada em rascunhos antigos, persiste a escolha e invalida o preparo afetado', () => {
+  const { catalog, draft } = setup();
+  const photos = [crypto.randomUUID(), crypto.randomUUID(), crypto.randomUUID()];
+  let saved = catalog.save({ ...draft, photos, rotateCover: undefined }, profiles, new Set(photos));
+  expect(saved.rotateCover).toBe(false);
+  expect(resolveListing(saved, profiles[1].id).photos).toEqual(photos);
+  catalog.delivery(saved.id, profiles[1].id, {
+    state: 'READY',
+    fingerprint: catalog.review(saved.id, profiles)[1].fingerprint,
+  });
+  saved = catalog.save({ ...saved, rotateCover: true }, profiles, new Set(photos));
+  expect(saved.deliveries[profiles[1].id].state).toBe('DRAFT');
+  const restored = new ListingCatalog();
+  restored.restore(catalog.drafts, profiles, new Set(photos));
+  expect(restored.find(saved.id).rotateCover).toBe(true);
+  expect(resolveListing(restored.find(saved.id), profiles[1].id).photos).toEqual([
+    photos[1],
+    photos[0],
+    photos[2],
+  ]);
+  expect(() => catalog.save({ ...saved, rotateCover: 'false' }, profiles, new Set(photos))).toThrow(
+    'foto principal',
+  );
+  saved = catalog.save({ ...saved, rotateCover: false }, profiles, new Set(photos));
+  expect(resolveListing(saved, profiles[1].id).photos).toEqual(photos);
+});
 it('herda a condição do produto e permite variação por conta sem aceitar valores inventados', () => {
   const { catalog, draft } = setup();
   const saved = catalog.save(

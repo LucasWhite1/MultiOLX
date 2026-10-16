@@ -265,6 +265,7 @@ function validateRows(rows) {
     return clean;
   });
 }
+const { messageTime } = require('./message-time.cjs');
 class UnifiedInbox {
   constructor() {
     this.accounts = new Map();
@@ -297,6 +298,14 @@ class UnifiedInbox {
           ...row,
           order,
           changedAt,
+          messageAt:
+            before &&
+            !newUnread &&
+            before.timeLabel === row.timeLabel &&
+            before.preview === row.preview &&
+            Number.isFinite(before.messageAt)
+              ? before.messageAt
+              : messageTime(row.timeLabel, now),
           lastDirection:
             row.lastDirection !== 'unknown'
               ? row.lastDirection
@@ -371,7 +380,7 @@ class UnifiedInbox {
     );
     conversations.sort(
       (a, b) =>
-        b.changedAt - a.changedAt ||
+        (b.messageAt ?? 0) - (a.messageAt ?? 0) ||
         a.order - b.order ||
         a.profileName.localeCompare(b.profileName, 'pt-BR') ||
         a.key.localeCompare(b.key),
@@ -389,7 +398,19 @@ class UnifiedInbox {
     const allowed = new Set(profiles.map((p) => p.id));
     for (const entry of entries) {
       if (!allowed.has(entry.id)) continue;
-      const rows = validateRows(entry.rows).map((row, order) => ({ ...row, order, changedAt: 0 }));
+      const observedAt = Number.isFinite(entry.observedAt) ? entry.observedAt : Date.now();
+      const rows = validateRows(entry.rows).map((row, order) => {
+        const saved = entry.rows[order].messageAt;
+        return {
+          ...row,
+          order,
+          changedAt: 0,
+          messageAt:
+            Number.isFinite(saved) && saved <= observedAt
+              ? saved
+              : messageTime(row.timeLabel, observedAt),
+        };
+      });
       this.accounts.set(entry.id, {
         rows,
         status: 'PAUSED',

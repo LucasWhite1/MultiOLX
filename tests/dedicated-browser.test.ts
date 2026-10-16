@@ -2,6 +2,17 @@ import { it, expect } from 'vitest';
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const { createProfile, profileId, allowedUrl, cookieForRestore } = require('../browser/policy.cjs');
+it('isola o Facebook da OLX e restringe os domínios da conexão Marketplace', () => {
+  expect(createProfile('Marketplace', 'facebook').provider).toBe('facebook');
+  expect(createProfile('OLX').provider).toBe('olx');
+  expect(() => createProfile('Outra', 'unknown')).toThrow();
+  expect(allowedUrl('https://www.facebook.com/marketplace/inbox/', 'facebook')).toBe(true);
+  expect(allowedUrl('https://www.facebook.com/checkpoint/', 'facebook')).toBe(true);
+  expect(allowedUrl('https://www.facebook.com/')).toBe(false);
+  expect(allowedUrl('https://www.olx.com.br/', 'facebook')).toBe(false);
+  expect(allowedUrl('https://facebook.com.evil.test/', 'facebook')).toBe(false);
+  expect(allowedUrl('http://facebook.com/', 'facebook')).toBe(false);
+});
 it('isola identificadores de perfis e impede caminhos ou nomes inválidos', () => {
   const a = createProfile(' Maria '),
     b = createProfile('Maria');

@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld(
 // This bridge belongs only to the packaged local toolbar, never to an OLX page.
 contextBridge.exposeInMainWorld('multiBrowser', {
   list: () => ipcRenderer.invoke('profiles:list'),
+  connectFacebook: () => ipcRenderer.invoke('facebook:connect'),
   create: (name) => ipcRenderer.invoke('profiles:create', name),
   rename: (id, name) => ipcRenderer.invoke('profiles:rename', id, name),
   remove: (id) => ipcRenderer.invoke('profiles:remove', id),

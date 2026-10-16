@@ -42,6 +42,7 @@
   }
   const map = {
     list: 'profiles:list',
+    connectFacebook: 'facebook:connect',
     create: 'profiles:create',
     rename: 'profiles:rename',
     remove: 'profiles:remove',

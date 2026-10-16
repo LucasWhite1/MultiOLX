@@ -246,15 +246,15 @@ function bindRemote(contents, id) {
   const guard = (event, legacyUrl, _sameDocument, legacyMainFrame) => {
     if (event.isMainFrame === false || legacyMainFrame === false) return;
     const url = event.url || legacyUrl;
-    if (!allowedUrl(url)) {
+    if (!allowedUrl(url, profiles.find((p) => p.id === id)?.provider)) {
       event.preventDefault();
-      send({ message: 'Este navegador abre somente OLX e a página de login Google.', error: true });
+      send({ message: 'Este destino não pertence à plataforma deste perfil.', error: true });
     }
   };
   contents.on('will-navigate', guard);
   contents.on('will-redirect', guard);
   contents.setWindowOpenHandler(({ url }) => {
-    if (!allowedUrl(url)) return { action: 'deny' };
+    if (!allowedUrl(url, profiles.find((p) => p.id === id)?.provider)) return { action: 'deny' };
     return {
       action: 'allow',
       overrideBrowserWindowOptions: {
@@ -387,10 +387,20 @@ function display(view) {
   }
 }
 function inboxState() {
-  return {
+  const state = {
     ...inbox.state(profiles),
     resources: { activePages: views.size, limit: maxPages, profiles: profiles.length, economy },
   };
+  state.accounts = state.accounts.map((account) =>
+    profiles.find((p) => p.id === account.id)?.provider === 'facebook'
+      ? {
+          ...account,
+          status: 'PAUSED',
+          message: 'Marketplace: conclua o login no perfil; integração em preparação.',
+        }
+      : account,
+  );
+  return state;
 }
 function publishInbox() {
   if (win && !win.isDestroyed()) {
@@ -578,6 +588,8 @@ async function ensureChat(id, retry = false) {
   if (listingService?.isWorker(id)) throw new Error('Esta conta está publicando.');
   profileId(id);
   if (!profiles.some((p) => p.id === id)) throw new Error('Perfil não encontrado.');
+  if (profiles.find((p) => p.id === id).provider === 'facebook')
+    throw new Error('Marketplace ainda em conexão. Abra o perfil Facebook para concluir o login.');
   let entry = chatViews.get(id);
   if (entry) {
     if (entry.returning) await entry.returning;
@@ -618,7 +630,11 @@ async function refreshInbox() {
 }
 function queueScan(ids, retry = false) {
   for (const id of ids)
-    if (!scanQueue.some((item) => item.id === id)) scanQueue.push({ id, retry });
+    if (
+      profiles.find((p) => p.id === id)?.provider !== 'facebook' &&
+      !scanQueue.some((item) => item.id === id)
+    )
+      scanQueue.push({ id, retry });
   if (!scanning) void scanProfiles();
 }
 async function scanProfiles() {
@@ -750,6 +766,28 @@ function resize() {
     send({ focusChat });
   }
 }
+async function connectFacebook() {
+  let profile = profiles.find((p) => p.provider === 'facebook');
+  if (!profile) {
+    profile = createProfile('Facebook Marketplace', 'facebook');
+    profiles.push(profile);
+    try {
+      await saveCatalog();
+    } catch (error) {
+      profiles.pop();
+      throw error;
+    }
+  }
+  await open(profile.id);
+  send({
+    mode: 'individual',
+    profileId: profile.id,
+    source: profile.name,
+    message:
+      'Entre no Facebook nesta janela. A leitura exclusiva do Marketplace será validada após o login; o Messenger pessoal não está sendo importado.',
+  });
+  return profile;
+}
 async function open(id) {
   if (listingService?.isWorker(id))
     throw new Error('Esta conta está publicando. Aguarde a conclusão.');
@@ -759,7 +797,20 @@ async function open(id) {
   mode = 'individual';
   active = id;
   display(view);
-  if (view.webContents.getURL() === '') await view.webContents.loadURL('https://www.olx.com.br/');
+  if (view.webContents.getURL() === '') {
+    const facebook = profiles.find((p) => p.id === id).provider === 'facebook';
+    const loading = view.webContents.loadURL(
+      facebook ? 'https://www.facebook.com/marketplace/inbox/' : 'https://www.olx.com.br/',
+    );
+    if (facebook)
+      void loading.catch(() =>
+        send({
+          message: 'Confira a conexão do Facebook ou conclua a verificação na página.',
+          error: true,
+        }),
+      );
+    else await loading;
+  }
   send({
     mode: 'individual',
     source: profiles.find((p) => p.id === id).name,
@@ -857,7 +908,7 @@ async function start() {
     dialog,
     nativeImage,
     trusted,
-    profiles: () => profiles,
+    profiles: () => profiles.filter((p) => p.provider !== 'facebook'),
     removedProfiles: () => removedProfiles.map((p) => p.id),
     window: () => win,
     publisherActive: (owner, contents) =>
@@ -971,6 +1022,10 @@ async function start() {
       throw error;
     }
     return profile;
+  });
+  registerHandler('facebook:connect', async (event) => {
+    trusted(event);
+    return connectFacebook();
   });
   registerHandler('profiles:rename', async (event, id, name) => {
     trusted(event);
@@ -1128,6 +1183,19 @@ async function start() {
     trusted(event);
     if (listingService?.isWorker(active))
       throw new Error('Esta conta está publicando. Aguarde a conclusão.');
+    if (
+      profiles.find((p) => p.id === active)?.provider === 'facebook' &&
+      ['chat', 'home'].includes(action)
+    ) {
+      const view = await acquirePage(active);
+      display(view);
+      await view.webContents.loadURL(
+        action === 'chat'
+          ? 'https://www.facebook.com/marketplace/inbox/'
+          : 'https://www.facebook.com/marketplace/',
+      );
+      return { ok: true };
+    }
     if (action === 'chat') {
       if (!active) throw new Error('Selecione um perfil.');
       const view = await ensureChat(active, true);
@@ -2258,6 +2326,26 @@ async function start() {
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
   app.on('second-instance', (_event, args) => {
+    if (args.includes('--diagnose-facebook'))
+      void (async () => {
+        const profile = profiles.find((p) => p.provider === 'facebook');
+        const view = profile && views.get(profile.id);
+        if (!view) throw Error('Abra o perfil Facebook Marketplace.');
+        const page = await view.webContents.executeJavaScript(`({
+          origin:location.origin,path:location.pathname,title:document.title,
+          login:!!document.querySelector('input[type=password]'),
+          checkpoint:/checkpoint|two_step_verification/.test(location.pathname),
+          marketplaceLinks:[...document.querySelectorAll('a[href]')].filter(a=>a.href.startsWith('https://www.facebook.com/marketplace/')).slice(0,15).map(a=>({text:a.innerText.slice(0,100),path:new URL(a.href).pathname})),
+        })`);
+        await fs.writeFile(
+          path.resolve('artifacts/facebook-connection.json'),
+          JSON.stringify(page, null, 2),
+        );
+      })().catch((error) => console.log('FACEBOOK_DIAGNOSTIC_FAILED ' + error.message));
+    if (args.includes('--connect-facebook'))
+      void connectFacebook()
+        .then(() => win.webContents.executeJavaScript('render()'))
+        .catch((error) => send({ message: error.message, error: true }));
     if (args.includes('--diagnose-ui'))
       void (async () => {
         const ui = await win.webContents.executeJavaScript(`({

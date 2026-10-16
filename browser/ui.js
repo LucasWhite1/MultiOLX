@@ -6,6 +6,13 @@ let mode = 'individual',
   selectedKey = null;
 let openingKey = null;
 const el = (id) => document.getElementById(id);
+el('connectFacebook').onclick = () =>
+  void act(async () => {
+    const profile = await api.connectFacebook();
+    active = profile.id;
+    setMode('individual');
+    await render();
+  });
 function status(message, error = false) {
   el('status').textContent = message;
   el('status').classList.toggle('error', error);
@@ -62,6 +69,8 @@ async function render() {
 }
 function setMode(value) {
   mode = value;
+  el('home').textContent =
+    profiles.find((p) => p.id === active)?.provider === 'facebook' ? 'Facebook' : 'OLX';
   el('listingWorkspace').hidden = mode !== 'listings';
   el('unifiedInbox').hidden = mode !== 'unified';
   document.querySelector('.welcome').hidden = mode !== 'individual';

@@ -5,6 +5,7 @@ const { randomBytes, timingSafeEqual } = require('node:crypto');
 const { verifyPassword, validHash } = require('./server-vault.cjs');
 const channels = new Set([
   'profiles:list',
+  'facebook:connect',
   'profiles:create',
   'profiles:rename',
   'profiles:remove',

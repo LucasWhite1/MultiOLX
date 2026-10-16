@@ -13,10 +13,11 @@ function profileId(value) {
     throw new Error('Perfil inválido.');
   return value;
 }
-function createProfile(name) {
-  return { id: crypto.randomUUID(), name: profileName(name) };
+function createProfile(name, provider = 'olx') {
+  if (!['olx', 'facebook'].includes(provider)) throw new Error('Plataforma inválida.');
+  return { id: crypto.randomUUID(), name: profileName(name), provider };
 }
-function allowedUrl(value) {
+function allowedUrl(value, provider = 'olx') {
   try {
     const url = new URL(value);
     return (
@@ -24,9 +25,14 @@ function allowedUrl(value) {
       !url.username &&
       !url.password &&
       !url.port &&
-      (url.hostname === 'olx.com.br' ||
-        url.hostname.endsWith('.olx.com.br') ||
-        ['accounts.google.com', 'accounts.google.com.br'].includes(url.hostname))
+      (provider === 'facebook'
+        ? url.hostname === 'facebook.com' ||
+          url.hostname.endsWith('.facebook.com') ||
+          url.hostname === 'messenger.com' ||
+          url.hostname.endsWith('.messenger.com')
+        : url.hostname === 'olx.com.br' ||
+          url.hostname.endsWith('.olx.com.br') ||
+          ['accounts.google.com', 'accounts.google.com.br'].includes(url.hostname))
     );
   } catch {
     return false;

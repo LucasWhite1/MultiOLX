@@ -227,15 +227,19 @@ function validateRows(rows) {
     )
       throw new Error('Conversa inválida.');
     const url = new URL(row.url);
-    if (
-      url.origin !== 'https://chat.olx.com.br' ||
-      url.pathname !== '/' ||
-      url.search !== `?chat-id=${row.externalId}` ||
-      url.hash ||
-      url.username ||
-      url.password ||
-      ids.has(row.externalId)
-    )
+    const facebook = row.platform === 'facebook-marketplace';
+    const sourceValid = facebook
+      ? url.origin === 'https://www.facebook.com' &&
+        ((/^\d{1,40}$/.test(row.externalId) &&
+          url.pathname === `/messages/t/${row.externalId}/` &&
+          !url.search) ||
+          (/^marketplace-(buy|sell)-[a-f0-9]{64}$/.test(row.externalId) &&
+            url.pathname === '/marketplace/inbox/' &&
+            url.search === `?multiolx-thread=${row.externalId}`))
+      : url.origin === 'https://chat.olx.com.br' &&
+        url.pathname === '/' &&
+        url.search === `?chat-id=${row.externalId}`;
+    if (!sourceValid || url.hash || url.username || url.password || ids.has(row.externalId))
       throw new Error('Origem ou identificador inválido.');
     ids.add(row.externalId);
     const clean = Object.fromEntries(
@@ -244,6 +248,9 @@ function validateRows(rows) {
         row[k],
       ]),
     );
+    if (facebook) clean.platform = 'facebook-marketplace';
+    if (facebook && ['buy', 'sell'].includes(row.marketplaceTab))
+      clean.marketplaceTab = row.marketplaceTab;
     clean.unread = typeof row.unread === 'boolean' ? row.unread : null;
     clean.unreadCount =
       clean.unread === true &&

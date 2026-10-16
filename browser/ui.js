@@ -191,7 +191,7 @@ function renderInbox() {
           el('conversationOwner').textContent = `Conta: ${c.profileName}`;
           renderInbox();
           status(
-            `Conversa de ${c.contact} · conta ${c.profileName}. Responda diretamente no chat da OLX.`,
+            `Conversa de ${c.contact} · conta ${c.profileName}. Responda diretamente no ${c.platform === 'facebook-marketplace' ? 'Facebook Marketplace' : 'chat da OLX'}.`,
           );
         });
       return button;

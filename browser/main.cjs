@@ -34,12 +34,48 @@ const { shouldDeferResource, backgroundCSS, restoreDeferredImages } = require('.
 const { createListingService } = require('./listing-service.cjs');
 const { createDeepSeek } = require('./deepseek.cjs');
 const { installComposerFocus } = require('./composer-focus.cjs');
+const { marketplaceDocument } = require('./facebook-marketplace.cjs');
+const facebookInboxUrl = 'https://www.facebook.com/marketplace/inbox/';
+async function facebookCall(view, command) {
+  const owner = profiles.find((p) => views.get(p.id) === view)?.id;
+  command = { known: inbox.accounts.get(owner)?.rows || [], ...command };
+  const result = await view.webContents.executeJavaScript(
+    `(${marketplaceDocument.toString()})(${JSON.stringify(command)})`,
+  );
+  if (result.nativeClick) {
+    const { x, y } = result.nativeClick;
+    const bounds = view.getBounds();
+    if (
+      !Number.isFinite(x) ||
+      !Number.isFinite(y) ||
+      x < 0 ||
+      y < 0 ||
+      x >= bounds.width ||
+      y >= bounds.height
+    )
+      throw Error('Controle Marketplace fora da área visível.');
+    if (view === displayedView && win.isFocused()) view.webContents.focus();
+    view.webContents.sendInputEvent({ type: 'mouseMove', x, y });
+    view.webContents.sendInputEvent({ type: 'mouseDown', x, y, button: 'left', clickCount: 1 });
+    view.webContents.sendInputEvent({ type: 'mouseUp', x, y, button: 'left', clickCount: 1 });
+    if (command.action === 'close') {
+      await new Promise((resolve) => setTimeout(resolve, 80));
+      const remaining = await view.webContents.executeJavaScript(
+        `(${marketplaceDocument.toString()})(${JSON.stringify(command)})`,
+      );
+      if (remaining.nativeClick)
+        throw Error('Não foi possível confirmar o fechamento do chat Marketplace.');
+    }
+  }
+  return result;
+}
 const webMode = process.env.MULTIOLX_WEB === '1';
 const safeStorage = webMode
   ? require('./server-vault.cjs').createServerVault(process.env.MULTIOLX_ENCRYPTION_KEY)
   : nativeSafeStorage;
 const webConfiguration = webMode ? require('./web-server.cjs').configuration() : null;
 let webAccess, remoteBrowser;
+let initialization;
 const remoteHandlers = new Map();
 function registerHandler(name, handler) {
   ipcMain.handle(name, handler);
@@ -85,6 +121,45 @@ const sessions = new Map(),
   chatViews = new Map(),
   popups = new Map();
 const inbox = new UnifiedInbox();
+const facebookWindows = new Map();
+function parkFacebookView(view) {
+  if (profiles.find((p) => views.get(p.id) === view)?.provider !== 'facebook') return;
+  let worker = facebookWindows.get(view);
+  if (!worker) {
+    const window = new BrowserWindow({
+      x: -30000,
+      y: -30000,
+      width: 1100,
+      height: 800,
+      show: false,
+      frame: false,
+      skipTaskbar: true,
+      focusable: false,
+      webPreferences: { ...preferences },
+    });
+    worker = { window, attached: false };
+    facebookWindows.set(view, worker);
+    view.webContents.once('destroyed', () => {
+      facebookWindows.delete(view);
+      if (!window.isDestroyed()) window.destroy();
+    });
+  }
+  if (!worker.attached) {
+    worker.window.contentView.addChildView(view);
+    worker.attached = true;
+  }
+  view.setBounds({ x: 0, y: 0, width: 1100, height: 800 });
+  view.webContents.setBackgroundThrottling(false);
+  worker.window.showInactive();
+}
+function unparkFacebookView(view) {
+  const worker = facebookWindows.get(view);
+  if (worker?.attached) {
+    worker.window.contentView.removeChildView(view);
+    worker.attached = false;
+    worker.window.hide();
+  }
+}
 const touched = new Map(),
   dirtySessions = new Set(),
   cookieDigests = new Map();
@@ -321,10 +396,12 @@ function hasOpenConversation(view) {
 }
 function resetConversation(view) {
   const pair = [...chatViews].find(([, entry]) => entry.view === view);
-  if (!pair) return Promise.resolve();
+  const facebook = profiles.find((p) => views.get(p.id) === view)?.provider === 'facebook';
+  if (!pair)
+    return facebook ? facebookCall(view, { action: 'close' }).catch(() => {}) : Promise.resolve();
   const [id, entry] = pair;
   if (entry.returning) return entry.returning;
-  if (!hasOpenConversation(view)) return Promise.resolve();
+  if (!facebook && !hasOpenConversation(view)) return Promise.resolve();
   entry.conversationOpen = false;
   entry.generation = (entry.generation || 0) + 1;
   entry.openDeadline = 0;
@@ -333,8 +410,11 @@ function resetConversation(view) {
   inbox.update(id, { status: 'LOADING' });
   // Reload the list route to unmount the conversation and its live read receipts.
   // Hiding the native view alone leaves the OLX conversation subscribed.
-  entry.returning = view.webContents
-    .loadURL('https://chat.olx.com.br/')
+  entry.returning = (
+    facebook
+      ? facebookCall(view, { action: 'close' })
+      : view.webContents.loadURL('https://chat.olx.com.br/')
+  )
     .catch(async () => {
       if (chatViews.get(id) !== entry) return;
       if (!view.webContents.isDestroyed())
@@ -353,7 +433,7 @@ function resetConversation(view) {
 async function showUnifiedInbox() {
   mode = 'unified';
   active = null;
-  display(null);
+  const closing = display(null);
   send({
     mode,
     profileId: null,
@@ -362,6 +442,7 @@ async function showUnifiedInbox() {
     back: false,
     forward: false,
   });
+  await closing;
   await Promise.all(
     [...chatViews.values()].map((entry) => entry.returning || resetConversation(entry.view)),
   );
@@ -370,21 +451,26 @@ async function showUnifiedInbox() {
 }
 function display(view) {
   const previous = displayedView;
-  if (previous && previous !== view) void resetConversation(previous);
+  const closing = previous && previous !== view ? resetConversation(previous) : Promise.resolve();
   if (displayedView) {
-    displayedView.webContents.setBackgroundThrottling(true);
+    displayedView.webContents.setBackgroundThrottling(
+      profiles.find((p) => views.get(p.id) === displayedView)?.provider !== 'facebook',
+    );
     win.contentView.removeChildView(displayedView);
     displayedView.setBounds({ x: 0, y: 0, width: 1100, height: 800 });
+    if (displayedView !== view) parkFacebookView(displayedView);
   }
   displayedView = view;
   if (previous) void updateVisuals(previous);
   if (view) {
+    unparkFacebookView(view);
     view.setVisible(!profileDialogOpen);
     view.webContents.setBackgroundThrottling(false);
     win.contentView.addChildView(view);
     resize();
     void updateVisuals(view);
   }
+  return closing;
 }
 function inboxState() {
   const state = {
@@ -395,8 +481,12 @@ function inboxState() {
     profiles.find((p) => p.id === account.id)?.provider === 'facebook'
       ? {
           ...account,
-          status: 'PAUSED',
-          message: 'Marketplace: conclua o login no perfil; integração em preparação.',
+          message:
+            account.status === 'READY'
+              ? 'Marketplace disponível'
+              : account.status === 'AUTH_REQUIRED'
+                ? 'Entre no Facebook neste perfil'
+                : account.message,
         }
       : account,
   );
@@ -497,20 +587,64 @@ async function readInbox(id) {
     return;
   if (
     entry.view.webContents.isLoadingMainFrame() &&
-    !entry.view.webContents.getURL().startsWith('https://chat.olx.com.br/')
+    !entry.view.webContents.getURL().startsWith('https://chat.olx.com.br/') &&
+    !entry.view.webContents.getURL().startsWith('https://www.facebook.com/marketplace/inbox') &&
+    !entry.view.webContents.getURL().startsWith('https://www.facebook.com/messages/marketplace')
   )
     return;
   entry.busy = true;
   const generation = entry.generation || 0;
   entry.lastRead = Date.now();
   try {
-    const result = await entry.view.webContents.executeJavaScript(
-      `(${readChatDocument.toString()})()`,
-    );
+    const facebook = profiles.find((p) => p.id === id)?.provider === 'facebook';
+    const result = facebook
+      ? await facebookCall(entry.view, {
+          action: 'read',
+          ensure: entry.view !== displayedView || entry.initializing,
+        })
+      : await entry.view.webContents.executeJavaScript(`(${readChatDocument.toString()})()`);
+    if (facebook)
+      entry.facebookDiagnostic = {
+        ...(result.diagnostic || {}),
+        status: result.status,
+        url: publicLocation(entry.view.webContents.getURL()),
+      };
     if (result.status === 'OPENING' && entry.openDeadline && Date.now() > entry.openDeadline)
       result.status = 'TIMEOUT';
     if (chatViews.get(id) !== entry || entry.returning || generation !== (entry.generation || 0))
       return;
+    if (facebook && result.status === 'READY') {
+      entry.initializing = false;
+      entry.facebookRows ||= new Map(
+        (inbox.accounts.get(id)?.rows || []).map((row) => [row.externalId, row]),
+      );
+      if (!result.partial) entry.facebookRows.clear();
+      for (const row of result.conversations) {
+        if (/^\d+$/.test(row.externalId)) {
+          for (const [key, cached] of entry.facebookRows)
+            if (
+              key.startsWith('marketplace-') &&
+              cached.contact === row.contact &&
+              cached.listingTitle === row.listingTitle
+            )
+              entry.facebookRows.delete(key);
+        }
+        entry.facebookRows.set(row.externalId, row);
+      }
+      result.conversations = [...entry.facebookRows.values()].slice(0, 200);
+      if (
+        entry.view === displayedView &&
+        win.isFocused() &&
+        result.openConversations > 0 &&
+        entry.facebookSelectedId
+      )
+        result.conversations = result.conversations.map((row) =>
+          row.externalId === entry.facebookSelectedId
+            ? { ...row, unread: false, unreadCount: null }
+            : row,
+        );
+      if (entry.view === displayedView) entry.conversationOpen = result.openConversations > 0;
+    }
     if (result.detail)
       result.detail.viewed =
         entry.view === displayedView && win.isVisible() && !win.isMinimized() && win.isFocused();
@@ -557,7 +691,14 @@ function acquirePage(id) {
         for (const owner of views.keys())
           if (listingService?.ownsPage(owner)) protectedIds.add(owner);
         for (const owner of popups.values()) protectedIds.add(owner);
-        const victim = leastRecent([...views.keys()], touched, protectedIds);
+        const victim =
+          leastRecent(
+            [...views.keys()].filter(
+              (owner) => profiles.find((p) => p.id === owner)?.provider !== 'facebook',
+            ),
+            touched,
+            protectedIds,
+          ) || leastRecent([...views.keys()], touched, protectedIds);
         if (!victim) throw new Error('Conclua as janelas de login antes de abrir outro perfil.');
         await releasePage(victim);
       }
@@ -568,6 +709,7 @@ function acquirePage(id) {
       });
       view.setBounds({ x: 0, y: 0, width: 1100, height: 800 });
       views.set(id, view);
+      parkFacebookView(view);
       touched.set(id, Date.now());
       bindRemote(view.webContents, id);
       view.webContents.on('dom-ready', () => {
@@ -588,12 +730,19 @@ async function ensureChat(id, retry = false) {
   if (listingService?.isWorker(id)) throw new Error('Esta conta está publicando.');
   profileId(id);
   if (!profiles.some((p) => p.id === id)) throw new Error('Perfil não encontrado.');
-  if (profiles.find((p) => p.id === id).provider === 'facebook')
-    throw new Error('Marketplace ainda em conexão. Abra o perfil Facebook para concluir o login.');
   let entry = chatViews.get(id);
   if (entry) {
     if (entry.returning) await entry.returning;
     if (retry) entry.stopped = false;
+    if (
+      retry &&
+      profiles.find((p) => p.id === id)?.provider === 'facebook' &&
+      !entry.view.webContents.getURL().startsWith('https://www.facebook.com/marketplace/inbox') &&
+      !entry.view.webContents.getURL().startsWith('https://www.facebook.com/messages/marketplace')
+    ) {
+      entry.initializing = true;
+      void entry.view.webContents.loadURL(facebookInboxUrl).catch(() => {});
+    }
     if (retry && entry.view.webContents.getURL().startsWith('https://conta.olx.com.br/')) {
       entry.stopped = false;
       void entry.view.webContents.loadURL('https://chat.olx.com.br/').catch(() => {});
@@ -605,12 +754,25 @@ async function ensureChat(id, retry = false) {
   if (listingService?.isWorker(id)) throw new Error('Esta conta está publicando.');
   if (!profiles.some((p) => p.id === id)) throw new Error('Perfil não encontrado.');
   if (chatViews.has(id)) return chatViews.get(id).view;
-  entry = { view, busy: false, stopped: false, lastRead: 0, startedAt: Date.now() };
+  if (profiles.find((p) => p.id === id)?.provider === 'facebook')
+    view.webContents.setBackgroundThrottling(false);
+  entry = {
+    view,
+    busy: false,
+    stopped: false,
+    lastRead: 0,
+    startedAt: Date.now(),
+    initializing: true,
+  };
   chatViews.set(id, entry);
   inbox.update(id, { status: 'LOADING' });
   publishInbox();
   void view.webContents
-    .loadURL('https://chat.olx.com.br/')
+    .loadURL(
+      profiles.find((p) => p.id === id).provider === 'facebook'
+        ? facebookInboxUrl
+        : 'https://chat.olx.com.br/',
+    )
     .then(() => readInbox(id))
     .catch((error) => {
       if (error?.code === 'ERR_ABORTED' || chatViews.get(id) !== entry) return;
@@ -630,11 +792,7 @@ async function refreshInbox() {
 }
 function queueScan(ids, retry = false) {
   for (const id of ids)
-    if (
-      profiles.find((p) => p.id === id)?.provider !== 'facebook' &&
-      !scanQueue.some((item) => item.id === id)
-    )
-      scanQueue.push({ id, retry });
+    if (!scanQueue.some((item) => item.id === id)) scanQueue.push({ id, retry });
   if (!scanning) void scanProfiles();
 }
 async function scanProfiles() {
@@ -648,7 +806,9 @@ async function scanProfiles() {
       if (existing === displayedView && !chatViews.has(id)) continue;
       try {
         const view = await ensureChat(id, retry),
-          until = Date.now() + 12000;
+          until =
+            Date.now() +
+            (profiles.find((p) => p.id === id)?.provider === 'facebook' ? 25000 : 12000);
         while (Date.now() < until && chatViews.get(id)?.view === view && !quitting) {
           await readInbox(id);
           if (inbox.accounts.get(id)?.status !== 'LOADING') break;
@@ -658,6 +818,28 @@ async function scanProfiles() {
           inbox.update(id, { status: 'TIMEOUT' });
           chatViews.get(id).stopped = true;
           publishInbox();
+        }
+        if (
+          profiles.find((p) => p.id === id)?.provider === 'facebook' &&
+          inbox.accounts.get(id)?.status === 'READY' &&
+          view !== displayedView &&
+          foregroundId !== id
+        ) {
+          for (
+            let step = 0;
+            step < 12 &&
+            view !== displayedView &&
+            foregroundId !== id &&
+            chatViews.get(id)?.view === view;
+            step++
+          ) {
+            const scroll = await facebookCall(view, { action: 'scroll' });
+            if (!scroll.moved) break;
+            await new Promise((resolve) => setTimeout(resolve, 250));
+            await readInbox(id);
+          }
+          if (view !== displayedView && chatViews.get(id)?.view === view)
+            await facebookCall(view, { action: 'scroll', top: true });
         }
       } catch {
         inbox.update(id, { status: 'ERROR' });
@@ -708,9 +890,24 @@ async function openConversation(key) {
       view.webContents.navigationHistory.getActiveIndex();
     chatViews.get(conversation.profileId).openDeadline = Date.now() + 15000;
     chatViews.get(conversation.profileId).conversationOpen = true;
-    const result = await view.webContents.executeJavaScript(
-      `(${activateChatDocument.toString()})(${JSON.stringify(conversation.externalId)})`,
-    );
+    const facebook = profiles.find((p) => p.id === conversation.profileId)?.provider === 'facebook';
+    let result;
+    if (facebook) {
+      result = await facebookCall(view, { action: 'open', id: conversation.externalId });
+      for (let step = 0; !result.clicked && step < 16; step++) {
+        const scroll = result.switched
+          ? { moved: true }
+          : await facebookCall(view, { action: 'scroll', top: step === 0 });
+        if (!scroll.moved && step > 0) break;
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        result = await facebookCall(view, { action: 'open', id: conversation.externalId });
+      }
+      if (result.clicked)
+        chatViews.get(conversation.profileId).facebookSelectedId = conversation.externalId;
+    } else
+      result = await view.webContents.executeJavaScript(
+        `(${activateChatDocument.toString()})(${JSON.stringify(conversation.externalId)})`,
+      );
     if (!result.clicked)
       throw new Error(
         'A conversa saiu da lista visível. Atualize o chat individual antes de tentar novamente.',
@@ -784,7 +981,7 @@ async function connectFacebook() {
     profileId: profile.id,
     source: profile.name,
     message:
-      'Entre no Facebook nesta janela. A leitura exclusiva do Marketplace será validada após o login; o Messenger pessoal não está sendo importado.',
+      'Facebook Marketplace: faça login se necessário. Somente a pasta Marketplace é incluída nos chats unificados.',
   });
   return profile;
 }
@@ -800,7 +997,7 @@ async function open(id) {
   if (view.webContents.getURL() === '') {
     const facebook = profiles.find((p) => p.id === id).provider === 'facebook';
     const loading = view.webContents.loadURL(
-      facebook ? 'https://www.facebook.com/marketplace/inbox/' : 'https://www.olx.com.br/',
+      facebook ? facebookInboxUrl : 'https://www.olx.com.br/',
     );
     if (facebook)
       void loading.catch(() =>
@@ -1187,13 +1384,12 @@ async function start() {
       profiles.find((p) => p.id === active)?.provider === 'facebook' &&
       ['chat', 'home'].includes(action)
     ) {
-      const view = await acquirePage(active);
+      const view = action === 'chat' ? await ensureChat(active, true) : await acquirePage(active);
       display(view);
-      await view.webContents.loadURL(
-        action === 'chat'
-          ? 'https://www.facebook.com/marketplace/inbox/'
-          : 'https://www.facebook.com/marketplace/',
-      );
+      if (action === 'home') {
+        chatViews.delete(active);
+        await view.webContents.loadURL('https://www.facebook.com/marketplace/');
+      }
       return { ok: true };
     }
     if (action === 'chat') {
@@ -1641,12 +1837,15 @@ async function start() {
       escapePage.insertText(message);
       escapePage.sendInputEvent({ type: 'keyDown', keyCode: 'Enter' });
       escapePage.sendInputEvent({ type: 'keyUp', keyCode: 'Enter' });
-      await new Promise((resolve) => setTimeout(resolve, 150));
-      if (
-        !(await escapePage.executeJavaScript(
+      let focused = false;
+      for (let attempt = 0; attempt < 20; attempt++) {
+        focused = await escapePage.executeJavaScript(
           `document.activeElement === document.querySelector('textarea') && document.body.dataset.lastSent === ${JSON.stringify(message)}`,
-        ))
-      )
+        );
+        if (focused) break;
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      if (!focused)
         throw new Error('Enter perdeu o foco após limpar/substituir o campo de mensagem.');
     }
     if ((await escapePage.executeJavaScript('document.body.dataset.focusSends')) !== '2')
@@ -2192,6 +2391,93 @@ async function start() {
     console.log(
       'MULTIOLX_LISTINGS_OK: herança, variações, revisão de duas contas, fotos, preparo sem publicar e envio explícito sem repetição.',
     );
+    const fbFixture = createProfile('Marketplace fixture', 'facebook');
+    profiles.push(fbFixture);
+    await saveCatalog();
+    const fbSession = await openSession(fbFixture.id);
+    const { facebookMarketplaceFixture } = require('../scripts/facebook-marketplace-fixture.cjs');
+    fbSession.protocol.handle(
+      'https',
+      () =>
+        new Response(facebookMarketplaceFixture(), {
+          headers: { 'Content-Type': 'text/html;charset=utf-8' },
+        }),
+    );
+    const fbView = await ensureChat(fbFixture.id);
+    for (let i = 0; i < 50 && inbox.accounts.get(fbFixture.id)?.status !== 'READY'; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      await readInbox(fbFixture.id);
+    }
+    const fbRows = inboxState().conversations.filter((c) => c.profileId === fbFixture.id);
+    if (
+      fbRows.length !== 2 ||
+      fbRows.some((c) => c.externalId === '999') ||
+      fbRows[0].platform !== 'facebook-marketplace'
+    )
+      throw Error('A pasta Marketplace não foi lida isoladamente do Messenger pessoal.');
+    await win.webContents.executeJavaScript('render()');
+    await openConversation(fbRows.find((c) => c.externalId === '123').key);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    if (
+      displayedView !== fbView ||
+      !(await fbView.webContents.executeJavaScript(
+        "!!document.querySelector('[contenteditable=true]')",
+      ))
+    )
+      throw Error('A conversa Marketplace não abriu na sessão correta.');
+    fbView.webContents.focus();
+    fbView.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
+    fbView.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });
+    for (let i = 0; i < 30; i++) {
+      if (
+        !displayedView &&
+        !(await fbView.webContents.executeJavaScript(
+          "!!document.querySelector('[contenteditable=true]')",
+        ))
+      )
+        break;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    if (
+      displayedView ||
+      (await fbView.webContents.executeJavaScript(
+        "!!document.querySelector('[contenteditable=true]')",
+      ))
+    )
+      throw Error('Esc deixou uma conversa Marketplace ativa em segundo plano.');
+    await fbView.webContents.executeJavaScript('fixtureNewMessage()');
+    for (let i = 0; i < 20; i++) {
+      await readInbox(fbFixture.id);
+      if (
+        inboxState().conversations.find(
+          (c) => c.profileId === fbFixture.id && c.externalId === '123',
+        )?.attention === 'unread'
+      )
+        break;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    if (
+      inboxState().conversations.find((c) => c.profileId === fbFixture.id && c.externalId === '123')
+        ?.attention !== 'unread'
+    )
+      throw Error('Nova mensagem Marketplace foi marcada como lida em segundo plano.');
+    if (listingService.summary().profiles.some((p) => p.id === fbFixture.id))
+      throw Error('Conta Facebook foi oferecida como destino de anúncio OLX.');
+    await fbView.webContents.executeJavaScript('fixtureNativeInbox()');
+    const nativeRows = await facebookCall(fbView, { action: 'read' });
+    if (
+      nativeRows.status !== 'READY' ||
+      nativeRows.conversations.length !== 2 ||
+      nativeRows.conversations[0].externalId !== '123' ||
+      !nativeRows.conversations[1].externalId.startsWith('marketplace-buy-')
+    )
+      throw Error(
+        'Lista principal Marketplace perdeu a identidade da conversa ou importou uma linha pessoal.',
+      );
+    await win.webContents.executeJavaScript(`window.multiBrowser.remove('${fbFixture.id}')`);
+    console.log(
+      'MULTIOLX_FACEBOOK_MARKETPLACE_OK: pasta exclusiva, mensagens pessoais excluídas, autoria, abertura, Esc e novas não lidas.',
+    );
     const disposable = await win.webContents.executeJavaScript(
       "window.multiBrowser.create('Perfil para remover')",
     );
@@ -2325,7 +2611,70 @@ async function start() {
 }
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
-  app.on('second-instance', (_event, args) => {
+  app.on('second-instance', async (_event, args) => {
+    await initialization;
+    if (args.includes('--verify-facebook-integration'))
+      void (async () => {
+        const profile = profiles.find((p) => p.provider === 'facebook');
+        if (!profile) throw Error('Facebook não conectado.');
+        await showUnifiedInbox();
+        await refreshInbox();
+        const deadline = Date.now() + 40000;
+        while (Date.now() < deadline && inbox.accounts.get(profile.id)?.status !== 'READY')
+          await new Promise((resolve) => setTimeout(resolve, 250));
+        const state = inboxState();
+        await fs.writeFile(
+          path.resolve('artifacts/facebook-unified-verification.json'),
+          JSON.stringify(
+            {
+              accounts: state.accounts,
+              facebook: state.conversations.filter((c) => c.platform === 'facebook-marketplace')
+                .length,
+              olx: state.conversations.filter((c) => c.platform !== 'facebook-marketplace').length,
+              mode,
+              displayed: !!displayedView,
+              diagnostic: chatViews.get(profile.id)?.facebookDiagnostic,
+            },
+            null,
+            2,
+          ),
+        );
+        await fs.writeFile(
+          path.resolve('artifacts/browser-marketplace-unified.png'),
+          (await win.webContents.capturePage()).toPNG(),
+        );
+      })().catch((error) => console.log('FACEBOOK_UNIFIED_VERIFY_FAILED ' + error.message));
+    if (args.includes('--inspect-facebook-inbox'))
+      void (async () => {
+        const profile = profiles.find((p) => p.provider === 'facebook');
+        if (!profile) throw Error('Conecte o Facebook primeiro.');
+        const view = await acquirePage(profile.id);
+        active = profile.id;
+        mode = 'individual';
+        display(view);
+        if (
+          !view.webContents.getURL().startsWith('https://www.facebook.com/marketplace/inbox') &&
+          !view.webContents.getURL().startsWith('https://www.facebook.com/messages/marketplace')
+        )
+          await Promise.race([
+            view.webContents.loadURL('https://www.facebook.com/marketplace/inbox/'),
+            new Promise((resolve) => setTimeout(resolve, 6000)),
+          ]);
+        delete require.cache[require.resolve('./facebook-marketplace.cjs')];
+        const { inspectMarketplaceDocument } = require('./facebook-marketplace.cjs');
+        const command = JSON.parse(
+          await fs
+            .readFile(path.resolve('artifacts/facebook-command.json'), 'utf8')
+            .catch(() => '{"action":"inspect"}'),
+        );
+        const result = await view.webContents.executeJavaScript(
+          `(${inspectMarketplaceDocument.toString()})(${JSON.stringify(command)})`,
+        );
+        await fs.writeFile(
+          path.resolve('artifacts/facebook-inbox-inspection.json'),
+          JSON.stringify(result, null, 2),
+        );
+      })().catch((error) => console.log('FACEBOOK_INBOX_INSPECTION_FAILED ' + error.message));
     if (args.includes('--diagnose-facebook'))
       void (async () => {
         const profile = profiles.find((p) => p.provider === 'facebook');
@@ -2537,7 +2886,16 @@ else {
       app.relaunch({
         args: process.argv
           .slice(1)
-          .filter((arg) => !['--inbox-report', '--verify-conversation'].includes(arg)),
+          .filter(
+            (arg) =>
+              ![
+                '--inbox-report',
+                '--verify-conversation',
+                '--verify-facebook-integration',
+                '--inspect-facebook-inbox',
+                '--restart',
+              ].includes(arg),
+          ),
       });
       app.quit();
       return;
@@ -2711,7 +3069,7 @@ else {
       });
   });
   app.on('window-all-closed', () => app.quit());
-  app
+  initialization = app
     .whenReady()
     .then(start)
     .catch((error) => {

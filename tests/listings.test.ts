@@ -7,6 +7,17 @@ const profiles = [
   { id: crypto.randomUUID(), name: 'A' },
   { id: crypto.randomUUID(), name: 'B' },
 ];
+it('restaura rascunhos após remoção confirmada sem aceitar contas desconhecidas', () => {
+  const { catalog, draft } = setup();
+  draft.overrides[profiles[1].id] = { price: '1200' };
+  const restored = new ListingCatalog();
+  restored.restore(catalog.drafts, [profiles[0]], new Set(), [profiles[1].id]);
+  expect(restored.find(draft.id).targets).toEqual([profiles[0].id]);
+  expect(restored.find(draft.id).overrides).toEqual({});
+  expect(() => new ListingCatalog().restore(catalog.drafts, [profiles[0]], new Set())).toThrow(
+    'contas',
+  );
+});
 it.each([
   [2, 2, [0, 1]],
   [2, 4, [0, 1, 0, 1]],

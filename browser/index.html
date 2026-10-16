@@ -286,6 +286,19 @@
         </div>
       </form>
     </dialog>
+    <dialog id="removeProfileDialog" aria-labelledby="removeProfileTitle">
+      <h2 id="removeProfileTitle">Remover perfil?</h2>
+      <p>
+        O perfil <strong id="removeProfileName"></strong> será removido deste MultiOLX, junto com
+        seu login salvo e sua seleção nos rascunhos.
+      </p>
+      <p>A conta e os anúncios publicados na OLX não serão excluídos.</p>
+      <p id="removeProfileError" class="error" role="alert"></p>
+      <div>
+        <button id="cancelRemoveProfile" type="button">Cancelar</button>
+        <button id="confirmRemoveProfile" type="button" class="danger">Remover perfil</button>
+      </div>
+    </dialog>
     <footer id="status" role="status">Pronto. Nenhum site foi aberto.</footer>
     <script src="ui.js"></script>
     <script src="listing-ui.js"></script>

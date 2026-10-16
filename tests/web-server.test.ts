@@ -79,6 +79,18 @@ it('valida origem, CSRF e lista de operações sem permitir IPC arbitrário', as
   expect((await post({ channel: 'arbitrary:exec', args: [] })).status).toBe(400);
   expect((await post({ channel: 'profiles:create', args: ['Teste'] })).status).toBe(200);
   expect(calls).toHaveLength(1);
+  expect(
+    (
+      await post(
+        { channel: 'profiles:remove', args: [crypto.randomUUID()] },
+        { ...headers(s), 'X-CSRF-Token': 'errado' },
+      )
+    ).status,
+  ).toBe(403);
+  expect((await post({ channel: 'profiles:remove', args: [crypto.randomUUID()] })).status).toBe(
+    200,
+  );
+  expect(calls).toHaveLength(2);
 });
 it('usa cookie HttpOnly e revoga acesso ao sair', async () => {
   const { url } = await server();

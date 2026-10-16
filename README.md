@@ -16,6 +16,8 @@ No Windows, também pode abrir **Abrir MultiOLX Browser.cmd** depois da instala�
 
 Crie um perfil por conta, selecione-o e faça login diretamente na OLX. **Chats unificados** reúne as conversas; os botões dos perfis mantêm o acesso individual. A sessão de cada conta fica em uma partição própria, independente do Chrome pessoal. Fechar uma página para economizar memória preserva a sessão; sair da OLX, expiração ou revogação podem exigir novo login.
 
+O **× ao lado do perfil** abre a confirmação de remoção. Remove o perfil e o login salvo deste MultiOLX e o retira dos rascunhos. A conta e os anúncios na OLX não são excluídos. Metadados de remoção impedem que o perfil reapareça ao reiniciar; cópias de segurança antigas não são alteradas.
+
 ## VPS e celular
 
 A versão web usa login e senha, interface responsiva e os navegadores executando no servidor. A implantação está preparada com Dockerfile, volume persistente, healthcheck e configuração do Easypanel. Consulte [o guia completo](docs/VPS-EASYPANEL.md). Gere suas credenciais com `npm run credentials`; elas ficam no arquivo privado `data/vps-credentials.txt` e não são enviadas ao Git.

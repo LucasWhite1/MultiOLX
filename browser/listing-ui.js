@@ -598,6 +598,11 @@
     return { saved: true };
   }
   window.multiListings = {
+    refreshProfiles: async () => {
+      data = await api.listListings();
+      const current = data.drafts.find((d) => d.id === draft?.id);
+      if (current) loadDraft(current);
+    },
     save,
     open,
     prepare: prepareSaved,

@@ -107,6 +107,7 @@ let healthKey = '',
 let win,
   active,
   profiles = [],
+  removedProfiles = [],
   quitting = false,
   saveTimer,
   snapshotQueue = Promise.resolve(),
@@ -145,7 +146,9 @@ async function atomic(file, bytes) {
 function saveCatalog() {
   catalogQueue = catalogQueue
     .catch(() => {})
-    .then(() => atomic(path.join(root, 'profiles.json'), JSON.stringify(profiles)));
+    .then(() =>
+      atomic(path.join(root, 'profiles.json'), JSON.stringify([...profiles, ...removedProfiles])),
+    );
   return catalogQueue;
 }
 function secureStorage() {
@@ -530,6 +533,7 @@ function acquirePage(id) {
   const next = pageQueue
     .catch(() => {})
     .then(async () => {
+      if (!profiles.some((p) => p.id === id)) throw new Error('Perfil não encontrado.');
       if (views.has(id)) {
         if (chatViews.get(id)?.returning) await chatViews.get(id).returning;
         touched.set(id, Date.now());
@@ -548,6 +552,7 @@ function acquirePage(id) {
         await releasePage(victim);
       }
       const ses = await openSession(id);
+      if (!profiles.some((p) => p.id === id)) throw new Error('Perfil não encontrado.');
       const view = new WebContentsView({
         webPreferences: { ...preferences, session: ses, backgroundThrottling: true },
       });
@@ -586,6 +591,7 @@ async function ensureChat(id, retry = false) {
   }
   const view = await acquirePage(id);
   if (listingService?.isWorker(id)) throw new Error('Esta conta está publicando.');
+  if (!profiles.some((p) => p.id === id)) throw new Error('Perfil não encontrado.');
   if (chatViews.has(id)) return chatViews.get(id).view;
   entry = { view, busy: false, stopped: false, lastRead: 0, startedAt: Date.now() };
   chatViews.set(id, entry);
@@ -791,6 +797,8 @@ async function start() {
       profiles.some((p) => profileId(p.id) !== p.id || profileName(p.name) !== p.name)
     )
       throw new Error('Catálogo inválido.');
+    removedProfiles = profiles.filter((p) => typeof p.removedAt === 'string');
+    profiles = profiles.filter((p) => !p.removedAt);
   } catch (error) {
     if (error.code !== 'ENOENT') throw error;
   }
@@ -850,6 +858,7 @@ async function start() {
     nativeImage,
     trusted,
     profiles: () => profiles,
+    removedProfiles: () => removedProfiles.map((p) => p.id),
     window: () => win,
     publisherActive: (owner, contents) =>
       active === owner && displayedView?.webContents === contents,
@@ -984,6 +993,53 @@ async function start() {
     profileDialogOpen = visible === true;
     if (!webMode && displayedView) displayedView.setVisible(!profileDialogOpen);
     if (!profileDialogOpen && displayedView) resize();
+  });
+  registerHandler('profiles:remove', async (event, id) => {
+    trusted(event);
+    profileId(id);
+    const index = profiles.findIndex((p) => p.id === id);
+    if (index < 0) throw new Error('Perfil não encontrado.');
+    if (listingService.batchActive() || foregroundId || scanning)
+      throw new Error(
+        'Aguarde a publicação, abertura ou atualização das contas terminar antes de remover.',
+      );
+    await win.webContents.executeJavaScript('window.multiListings?.save()');
+    await flushAll(true);
+    const [profile] = profiles.splice(index, 1);
+    const removed = { ...profile, removedAt: new Date().toISOString() };
+    removedProfiles.push(removed);
+    try {
+      await saveCatalog();
+      await listingService.removeProfile(id);
+    } catch (error) {
+      removedProfiles.splice(removedProfiles.indexOf(removed), 1);
+      profiles.splice(index, 0, profile);
+      await saveCatalog();
+      throw error;
+    }
+    const view = views.get(id);
+    chatViews.delete(id);
+    views.delete(id);
+    touched.delete(id);
+    scanQueue = scanQueue.filter((item) => item.id !== id);
+    inbox.accounts.delete(id);
+    for (const [popup, owner] of popups) if (owner === id) popup.close();
+    if (displayedView === view) display(null);
+    if (view && !view.webContents.isDestroyed()) view.webContents.close();
+    const ses = sessions.get(id);
+    sessions.delete(id);
+    let cleanupFailed = false;
+    try {
+      if (ses) await ses.clearStorageData();
+      await fs.rm(path.join(root, `session-${id}.enc`), { force: true });
+    } catch {
+      cleanupFailed = true;
+    }
+    dirtySessions.delete(id);
+    cookieDigests.delete(id);
+    if (active === id) await showUnifiedInbox();
+    publishInbox();
+    return { removed: true, cleanupFailed };
   });
   registerHandler('profiles:open', async (event, id) => {
     trusted(event);
@@ -2068,6 +2124,75 @@ async function start() {
     console.log(
       'MULTIOLX_LISTINGS_OK: herança, variações, revisão de duas contas, fotos, preparo sem publicar e envio explícito sem repetição.',
     );
+    const disposable = await win.webContents.executeJavaScript(
+      "window.multiBrowser.create('Perfil para remover')",
+    );
+    const disposableSession = await openSession(disposable.id);
+    disposableSession.protocol.handle(
+      'https',
+      () =>
+        new Response('<h1>Perfil descartável local</h1>', {
+          headers: { 'Content-Type': 'text/html' },
+        }),
+    );
+    await disposableSession.cookies.set({
+      url: 'https://fixture.test/',
+      name: 'remove-fixture',
+      value: 'temporary',
+    });
+    await saveCookies(disposable.id, disposableSession);
+    let disposableDraft = listingService.catalog.create();
+    disposableDraft.targets = [a.id, disposable.id];
+    disposableDraft.overrides[disposable.id] = { price: '30' };
+    await listingService.persist();
+    await win.webContents.executeJavaScript(`window.multiBrowser.open('${disposable.id}')`);
+    await win.webContents.executeJavaScript('render()');
+    await win.webContents.executeJavaScript(
+      'document.querySelector(\'[aria-label="Remover perfil Perfil para remover"]\').click()',
+    );
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    if (
+      displayedView.getVisible() ||
+      !(await win.webContents.executeJavaScript(
+        "document.getElementById('removeProfileDialog').open",
+      ))
+    )
+      throw Error('Confirmação de remoção ficou escondida atrás da página.');
+    await win.webContents.executeJavaScript(
+      "document.getElementById('cancelRemoveProfile').click()",
+    );
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    if (!profiles.some((p) => p.id === disposable.id) || !displayedView.getVisible())
+      throw Error('Cancelar removeu o perfil ou ocultou sua página.');
+    await win.webContents.executeJavaScript(
+      'document.querySelector(\'[aria-label="Remover perfil Perfil para remover"]\').click()',
+    );
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    await win.webContents.executeJavaScript(
+      "document.getElementById('confirmRemoveProfile').click()",
+    );
+    for (let i = 0; i < 60; i++) {
+      if (
+        !(await win.webContents.executeJavaScript(
+          "document.getElementById('removeProfileDialog').open",
+        ))
+      )
+        break;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    if (
+      profiles.some((p) => p.id === disposable.id) ||
+      !profiles.some((p) => p.id === a.id) ||
+      views.has(disposable.id) ||
+      sessions.has(disposable.id) ||
+      listingService.catalog.find(disposableDraft.id).targets.includes(disposable.id) ||
+      (await disposableSession.cookies.get({ url: 'https://fixture.test/' })).length ||
+      nativeFs.existsSync(path.join(root, `session-${disposable.id}.enc`))
+    )
+      throw Error('Remoção não limpou perfil, página, sessão ou rascunhos.');
+    console.log(
+      'MULTIOLX_PROFILE_REMOVE_OK: confirmação, cancelamento, perfil ativo, sessão e rascunhos sem afetar outra conta.',
+    );
     app.quit();
   }
   if (
@@ -2086,6 +2211,11 @@ async function start() {
     });
   }
   if (process.argv.includes('--self-test-restore')) {
+    if (
+      !removedProfiles.some((p) => p.name === 'Perfil para remover') ||
+      profiles.some((p) => p.name === 'Perfil para remover')
+    )
+      throw Error('O perfil removido reapareceu após reiniciar.');
     const id = profiles[0]?.id;
     if (!id) throw new Error('Catálogo não sobreviveu ao reinício.');
     const restoredListing = listingService.catalog.drafts.find(

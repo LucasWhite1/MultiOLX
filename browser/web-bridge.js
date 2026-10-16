@@ -44,6 +44,7 @@
     list: 'profiles:list',
     create: 'profiles:create',
     rename: 'profiles:rename',
+    remove: 'profiles:remove',
     open: 'profiles:open',
     close: 'profiles:close',
     navigate: 'browser:navigate',

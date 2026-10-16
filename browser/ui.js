@@ -31,7 +31,31 @@ async function render() {
         setMode('individual');
         await render();
       });
-    el('profiles').append(button);
+    const row = document.createElement('div');
+    row.className = 'profile-row';
+    const remove = document.createElement('button');
+    remove.className = 'profile-remove';
+    remove.textContent = '×';
+    remove.title = `Remover perfil ${profile.name}`;
+    remove.setAttribute('aria-label', `Remover perfil ${profile.name}`);
+    remove.onclick = () =>
+      void act(async () => {
+        if (removingProfile) return;
+        removingProfile = profile;
+        el('removeProfileError').textContent = '';
+        el('removeProfileName').textContent = profile.name;
+        await api.profileDialog?.(true);
+        try {
+          el('removeProfileDialog').showModal();
+          el('cancelRemoveProfile').focus();
+        } catch (error) {
+          removingProfile = null;
+          await api.profileDialog?.(false);
+          throw error;
+        }
+      });
+    row.append(button, remove);
+    el('profiles').append(row);
   }
   for (const id of ['rename', 'reload', 'home', 'chat', 'close'])
     el(id).disabled = mode !== 'individual' || !active;
@@ -264,6 +288,42 @@ el('create').onsubmit = (event) => {
   });
 };
 let renamingProfileId = null;
+let removingProfile = null,
+  removingBusy = false;
+el('cancelRemoveProfile').onclick = () => el('removeProfileDialog').close();
+el('removeProfileDialog').addEventListener('cancel', (event) => {
+  if (removingBusy) event.preventDefault();
+});
+el('removeProfileDialog').addEventListener('close', () => {
+  removingProfile = null;
+  void act(() => api.profileDialog?.(false));
+});
+el('confirmRemoveProfile').onclick = () =>
+  void act(async () => {
+    if (!removingProfile || removingBusy) return;
+    removingBusy = true;
+    el('confirmRemoveProfile').disabled = true;
+    el('cancelRemoveProfile').disabled = true;
+    try {
+      await window.multiListings?.save();
+      const result = await api.remove(removingProfile.id);
+      el('removeProfileDialog').close();
+      await render();
+      await window.multiListings?.refreshProfiles();
+      status(
+        result.cleanupFailed
+          ? 'Perfil removido. Parte da limpeza dos dados locais não pôde ser concluída.'
+          : 'Perfil removido deste MultiOLX. A conta e os anúncios na OLX não foram excluídos.',
+      );
+    } catch (error) {
+      el('removeProfileError').textContent = error.message;
+      throw error;
+    } finally {
+      removingBusy = false;
+      el('confirmRemoveProfile').disabled = false;
+      el('cancelRemoveProfile').disabled = false;
+    }
+  });
 el('rename').onclick = () =>
   act(async () => {
     const profile = profiles.find((p) => p.id === active);

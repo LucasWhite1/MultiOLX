@@ -7,6 +7,7 @@ const channels = new Set([
   'profiles:list',
   'profiles:create',
   'profiles:rename',
+  'profiles:remove',
   'profiles:open',
   'profiles:close',
   'browser:navigate',

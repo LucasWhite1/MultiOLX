@@ -87,7 +87,7 @@ function createListingService(options) {
           throw new Error('Foto inválida.');
       }
       assets = new Map(data.assets.map((a) => [a.id, a]));
-      catalog.restore(data.drafts, profiles(), new Set(assets.keys()));
+      catalog.restore(data.drafts, profiles(), new Set(assets.keys()), options.removedProfiles?.());
     } catch (error) {
       if (error.code !== 'ENOENT')
         throw new Error(
@@ -717,6 +717,23 @@ function createListingService(options) {
   }
   handle('listings:publish-all', (id, revision) => startBatch(id, revision));
   return {
+    removeProfile: (id) =>
+      mutate(() => {
+        for (const draft of [...catalog.drafts]) {
+          if (!draft.targets.includes(id) && !draft.overrides[id] && !draft.deliveries[id])
+            continue;
+          const overrides = { ...draft.overrides };
+          delete overrides[id];
+          const saved = catalog.save(
+            { ...draft, targets: draft.targets.filter((owner) => owner !== id), overrides },
+            profiles(),
+            new Set(assets.keys()),
+          );
+          delete saved.deliveries[id];
+        }
+        if (prepared?.owner === id) prepared = null;
+        return { ok: true };
+      }),
     checkBackground: (id) => startBatch(id, catalog.find(id).revision, true),
     diagnostics: () => [...diagnostics],
     photoPayload,

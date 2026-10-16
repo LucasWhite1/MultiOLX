@@ -201,11 +201,21 @@ class ListingCatalog {
     draft.deliveries[owner] = { ...result, updatedAt: new Date().toISOString() };
     return draft.deliveries[owner];
   }
-  restore(data, profiles, assets) {
+  restore(data, profiles, assets, removedIds = []) {
     if (!Array.isArray(data) || data.length > 500)
       throw new Error('Catálogo de anúncios inválido.');
     const restored = new ListingCatalog();
-    for (const entry of data) {
+    for (const original of data) {
+      const removed = new Set(removedIds);
+      const entry = removed.size
+        ? {
+            ...original,
+            targets: original.targets.filter((id) => !removed.has(id)),
+            overrides: Object.fromEntries(
+              Object.entries(original.overrides).filter(([id]) => !removed.has(id)),
+            ),
+          }
+        : original;
       profileId(entry.id);
       if (restored.drafts.some((d) => d.id === entry.id)) throw new Error('Rascunho duplicado.');
       const revision = Number.isInteger(entry.revision) && entry.revision > 0 ? entry.revision : 1;

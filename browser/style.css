@@ -90,6 +90,28 @@ aside p {
   color: #6d28d9;
   border-color: #c4b5fd;
 }
+.profile-row {
+  display: flex;
+  gap: 5px;
+  align-items: stretch;
+}
+.profile-row > button:first-child {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+#profiles .profile-remove {
+  flex: none;
+  width: 34px;
+  padding: 4px;
+  text-align: center;
+  color: #b42318;
+  font-size: 22px;
+}
+.danger {
+  color: #b42318;
+  border-color: #b42318;
+}
 form {
   display: grid;
   gap: 10px;

@@ -1,0 +1,16 @@
+# Easypanel 2.32 Compose beta requires the proxy network and DNS alias explicitly.
+services:
+  multiolx:
+    extends:
+      file: compose.yml
+      service: multiolx
+    networks:
+      proxy:
+        aliases:
+          - ${MULTIOLX_PROXY_ALIAS:?Configure the destination hostname shown in Easypanel Domains}
+networks:
+  proxy:
+    external: true
+    name: ${MULTIOLX_PROXY_NETWORK:-easypanel}
+volumes:
+  multiolx-data:

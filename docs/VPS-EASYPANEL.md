@@ -32,6 +32,21 @@ O Dockerfile usa usuário não privilegiado, sandbox por user namespaces do Chro
 
 A seleção `--disable-setuid-sandbox` acontece no comando de lançamento do Electron, antes de carregar o JavaScript. Defini-la apenas com `app.commandLine.appendSwitch` é tarde para a inicialização do zygote. Isso seleciona o sandbox por namespaces; não desativa esse sandbox. O Compose de produção não publica portas no host: use o proxy HTTPS do Easypanel, apontando para o serviço interno `multiolx:3000`. A porta 3000 do host pode já pertencer ao próprio painel. O arquivo `compose.local.yml` mantém a publicação em localhost apenas para desenvolvimento.
 
+### Easypanel 2.32: rede do proxy e implantação atual
+
+O Compose beta dessa versão pode iniciar o container em sua rede própria sem ligá-lo ao proxy. Nesse caso, use **`compose.easypanel.yml`** no campo Arquivo Docker Compose. Esse arquivo herda o sandbox e o volume de `compose.yml` e conecta apenas o serviço web à rede externa do proxy, com um alias explícito. Não cria nem publica portas no host. Configure também:
+
+```dotenv
+MULTIOLX_PROXY_NETWORK=easypanel
+MULTIOLX_PROXY_ALIAS=producao_multiolx-runtime_multiolx
+```
+
+O alias deve corresponder exatamente ao hostname de destino que a aba Domínios mostra para o serviço Compose. O nome da rede deve ser o da rede existente do proxy, confirmado para o servidor utilizado. Não conecte bancos ou outros serviços privados a essa rede.
+
+Implantação validada em 24/10/2026: projeto `producao`, serviço Compose **`multiolx-runtime`**, branch `codex/facebook-marketplace`, arquivo `compose.easypanel.yml`, serviço interno `multiolx`, porta 3000. Endereço: `https://producao-multi-olx.9br0os.easypanel.host`. O login com as credenciais existentes e `/healthz` foram verificados no navegador público. O volume nomeado `producao_multiolx-runtime_multiolx-data` mantém os dados entre implantações; preserve-o, assim como a chave de criptografia.
+
+O serviço App antigo **`multi-olx`** ficou parado e preservado; sua antiga regra aponta para o caminho `/__multiolx_legacy`. O caminho principal `/` pertence ao Compose. Não reative ou reimplante o App antigo para atualizar a aplicação. As sessões desktop não foram transferidas: conecte as contas na instalação da VPS.
+
 ## Primeiro acesso às contas OLX
 
 Crie um perfil, abra-o e faça o login diretamente na página da OLX exibida no painel. As verificações de identidade/segurança continuam sendo concluídas pela pessoa. Janelas de login Google, quando abertas pela OLX, aparecem no mesmo visualizador remoto; **Fechar janela de login** fecha apenas esse popup.

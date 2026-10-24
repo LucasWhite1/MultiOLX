@@ -31,8 +31,11 @@ function createRemoteBrowser({
   };
   async function composer(contents, context) {
     if (context.platform !== 'facebook-marketplace') {
-      const dismissed = await contents.executeJavaScript(`(${dismissAppPromotion.toString()})()`);
-      if (dismissed === true) await new Promise((r) => setTimeout(r, 100));
+      for (let step = 0; step < 4; step++) {
+        const dismissed = await contents.executeJavaScript(`(${dismissAppPromotion.toString()})()`);
+        if (dismissed !== true) break;
+        await new Promise((r) => setTimeout(r, 100));
+      }
     }
     const result = await contents.executeJavaScript(
       `(()=>{try{return (${chatComposerDocument.toString()})(${JSON.stringify(context)})}catch(error){return {error:error.message}}})()`,

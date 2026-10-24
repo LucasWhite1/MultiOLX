@@ -147,7 +147,8 @@ async function runWebSmoke({
     document.getElementById('messages').setAttribute('aria-hidden','true');
     const dialog=document.createElement('div');dialog.id='mobile-promotion';dialog.setAttribute('role','dialog');dialog.style.cssText='position:fixed;inset:0;background:white;z-index:100';
     const heading=document.createElement('h2');heading.textContent='Evoluímos para você negociar com mais segurança';heading.style.width='100%';
-    const close=document.createElement('button');close.setAttribute('aria-label','Fechar aviso');close.textContent='Entendi';close.onclick=()=>{document.getElementById('messages').removeAttribute('aria-hidden');dialog.remove();};
+    let step=0;const headings=['Evoluímos para você negociar com mais segurança','Informações para negociar com mais confiança','A experiência completa para fechar seu negócio por aqui'];
+    const close=document.createElement('button');close.textContent='Próximo';close.onclick=()=>{step++;if(step<3){heading.textContent=headings[step];close.textContent=step===2?'Concluir':'Próximo';}else{document.getElementById('messages').removeAttribute('aria-hidden');dialog.remove();}};
     dialog.append(heading,close);document.body.append(dialog);
   })()`);
   panel.focus();

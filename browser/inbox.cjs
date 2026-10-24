@@ -148,12 +148,15 @@ function dismissAppPromotion() {
   const bodyText = document.body?.innerText || '';
   if (
     location.origin === 'https://chat.olx.com.br' &&
-    /Evoluímos[\s\S]{0,100}negociar/.test(bodyText)
+    /Evoluímos[\s\S]{0,100}negociar|Informações para negociar com mais confiança|A experiência completa para fechar seu negócio por aqui/.test(
+      bodyText.replace(/\s+/g, ' '),
+    )
   ) {
     const heading = [...document.querySelectorAll('h1,h2,h3,p,div,span')].find(
       (node) =>
-        /^Evoluímos[\s\S]{0,100}negociar/.test(node.innerText?.trim() || '') &&
-        (node.innerText?.length || 0) < 200,
+        /^(?:Evoluímos[\s\S]{0,100}negociar|Informações para negociar com mais confiança|A experiência completa para fechar seu negócio por aqui)/.test(
+          (node.innerText?.trim() || '').replace(/\s+/g, ' '),
+        ) && (node.innerText?.length || 0) < 200,
     );
     for (let panel = heading; panel && panel !== document.body; panel = panel.parentElement) {
       const bounds = panel.getBoundingClientRect();
@@ -163,7 +166,9 @@ function dismissAppPromotion() {
         return (
           rect.width > 0 &&
           (/fechar|close|dispensar/i.test(label) ||
-            /^(entendi|agora não|fechar|ok|continuar|vamos lá)$/i.test(button.innerText.trim()) ||
+            /^(entendi|agora não|fechar|ok|continuar|vamos lá|próximo|concluir)$/i.test(
+              button.innerText.trim(),
+            ) ||
             (!button.innerText.trim() &&
               rect.width <= 60 &&
               rect.height <= 60 &&

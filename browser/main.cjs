@@ -75,6 +75,7 @@ const safeStorage = webMode
   : nativeSafeStorage;
 const webConfiguration = webMode ? require('./web-server.cjs').configuration() : null;
 let webAccess, remoteBrowser;
+let remoteConversation = null;
 let initialization;
 const remoteHandlers = new Map();
 function registerHandler(name, handler) {
@@ -431,6 +432,7 @@ function resetConversation(view) {
   return entry.returning;
 }
 async function showUnifiedInbox() {
+  remoteConversation = null;
   mode = 'unified';
   active = null;
   const closing = display(null);
@@ -451,6 +453,7 @@ async function showUnifiedInbox() {
 }
 function display(view) {
   const previous = displayedView;
+  if (previous !== view) remoteConversation = null;
   const closing = previous && previous !== view ? resetConversation(previous) : Promise.resolve();
   if (displayedView) {
     displayedView.webContents.setBackgroundThrottling(
@@ -871,6 +874,7 @@ async function waitForList(id, ms = 12000) {
   throw new Error('O chat não ficou disponível. Abra o perfil para conferir o login ou a conexão.');
 }
 async function openConversation(key) {
+  remoteConversation = null;
   if (listingService?.batchActive())
     throw new Error('Aguarde a publicação antes de abrir conversas.');
   if (typeof key !== 'string' || key.length > 1200) throw new Error('Conversa inválida.');
@@ -912,6 +916,13 @@ async function openConversation(key) {
       throw new Error(
         'A conversa saiu da lista visível. Atualize o chat individual antes de tentar novamente.',
       );
+    remoteConversation = {
+      key,
+      profileId: conversation.profileId,
+      url: conversation.url,
+      contact: conversation.contact,
+      platform: conversation.platform,
+    };
     for (const delay of [500, 1800, 4000])
       setTimeout(() => {
         if (views.get(conversation.profileId) === view && !view.webContents.isDestroyed())
@@ -1429,6 +1440,7 @@ async function start() {
       view: () => displayedView,
       popups,
       owner: () => active,
+      conversation: () => (mode === 'unified' && displayedView ? remoteConversation : null),
       busy: (id) => listingService.isWorker(id),
     });
     webAccess = await require('./web-server.cjs').createWebServer({
@@ -1446,6 +1458,7 @@ async function start() {
         profileId: active || null,
         source: profiles.find((p) => p.id === active)?.name || '',
         hasView: !!displayedView,
+        conversationKey: mode === 'unified' && displayedView ? remoteConversation?.key : null,
         location: displayedView
           ? publicLocation(displayedView.webContents.getURL())
           : mode === 'listings'

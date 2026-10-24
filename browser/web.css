@@ -57,6 +57,9 @@
 .mobile-menu {
   display: none;
 }
+.menu-backdrop {
+  display: none;
+}
 .web-app aside {
   overflow-y: auto;
 }
@@ -111,7 +114,7 @@
 .remote-tools button {
   font-size: 12px;
 }
-@media (max-width: 760px) {
+@media (max-width: 760px), (max-width: 1000px) and (max-height: 500px) {
   .web-app header {
     height: auto;
     min-height: 64px;
@@ -248,9 +251,89 @@
   }
 }
 .web-app {
-  height: 100dvh;
+  position: fixed;
+  top: var(--app-top, 0px);
+  left: 0;
+  right: 0;
+  height: var(--app-height, 100dvh);
   overflow: hidden;
   --header-height: 64px;
+}
+.web-app #remoteBrowser {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  gap: 6px;
+}
+.web-app #remoteBrowser [hidden] {
+  display: none !important;
+}
+.remote-stage {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.remote-caption {
+  margin: 0;
+  font-size: 12px;
+  color: #687184;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.remote-tools {
+  flex: none;
+  margin: 0;
+}
+.remote-reply {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  margin: 0;
+  padding: 8px 0 max(4px, env(safe-area-inset-bottom));
+  border-top: 1px solid #e5e7eb;
+  background: white;
+  flex: none;
+}
+.remote-reply textarea {
+  width: 100%;
+  min-height: 48px;
+  max-height: 100px;
+  resize: vertical;
+  padding: 10px;
+  border: 1px solid #dce0e9;
+  border-radius: 10px;
+  font: inherit;
+  font-size: 16px;
+}
+.remote-reply button {
+  align-self: end;
+  min-height: 48px;
+}
+.remote-reply-notice {
+  grid-column: 1 / -1;
+  font-size: 12px;
+  line-height: 1.4;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.remote-reply-notice:empty {
+  display: none;
+}
+.remote-extra {
+  flex: none;
+  font-size: 12px;
+}
+.remote-extra summary {
+  cursor: pointer;
+  padding: 6px 0;
+  color: #687184;
+}
+.remote-typing {
+  flex: none;
+  margin: 0;
 }
 .web-app aside {
   top: var(--header-height);
@@ -281,7 +364,7 @@
 .web-app .listing-field-pair {
   min-width: 0;
 }
-@media (max-width: 760px) {
+@media (max-width: 760px), (max-width: 1000px) and (max-height: 500px) {
   .web-app main {
     left: 0;
   }
@@ -315,5 +398,91 @@
   }
   .web-app .remote-tools {
     margin-top: 0;
+  }
+  .web-app header {
+    min-height: 56px;
+    padding: 6px 10px;
+    justify-content: flex-start;
+  }
+  .web-app header > button {
+    min-height: 42px;
+  }
+  .web-app header .resource-controls {
+    display: none;
+  }
+  .web-app aside .resource-controls {
+    display: flex;
+    flex-wrap: wrap;
+    margin: 12px 0;
+  }
+  .web-app aside .resource-controls label {
+    display: flex;
+  }
+  .web-app aside .economy-label {
+    white-space: normal;
+  }
+  .mobile-settings summary {
+    padding: 12px 0;
+    cursor: pointer;
+  }
+  .web-app .brand {
+    margin-right: auto;
+  }
+  .web-app #webLogout {
+    margin-left: 0;
+  }
+  .web-app #allChats,
+  .web-app #currentSource {
+    display: none;
+  }
+  .web-app footer {
+    padding: 6px 10px;
+  }
+  .web-app .menu-backdrop {
+    position: absolute;
+    inset: var(--header-height) 0 32px;
+    background: #0005;
+    z-index: 19;
+    border: 0;
+    border-radius: 0;
+  }
+  .web-app.menu-open .menu-backdrop {
+    display: block;
+  }
+  .web-app aside {
+    width: min(88vw, 320px);
+  }
+  .web-app.remote-open main > nav {
+    display: none;
+  }
+  .web-app.remote-open #remoteBrowser {
+    inset: 0;
+    padding: 6px;
+  }
+  .web-app .remote-tools button {
+    min-height: 40px;
+    padding: 7px;
+  }
+  .web-app .remote-typing {
+    position: static;
+    padding: 4px 0;
+  }
+  .web-app .remote-typing input {
+    flex-basis: 100%;
+  }
+  .web-app .remote-typing button {
+    flex: 1;
+    min-height: 42px;
+  }
+  .web-app .inbox-heading {
+    padding: 12px 12px 6px;
+  }
+  .web-app .inbox-list #inboxSearch {
+    max-width: none;
+    margin: 5px 12px;
+  }
+  .web-app .inbox-list button,
+  .web-app aside button {
+    min-height: 44px;
   }
 }

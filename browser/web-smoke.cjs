@@ -32,7 +32,15 @@ async function runWebSmoke({
       if (await fn()) return;
       await new Promise((r) => setTimeout(r, 100));
     }
-    throw Error('Tempo de espera do teste web excedido.');
+    const evidence = await execute(
+      `({status:document.getElementById('status')?.textContent,rows:document.querySelectorAll('.conversation-row').length,replyHidden:document.querySelector('.remote-reply')?.hidden,remoteHidden:document.getElementById('remoteBrowser')?.hidden})`,
+    );
+    throw Error(
+      'Tempo de espera do teste web excedido: ' +
+        fn.toString().slice(0, 160) +
+        ' ' +
+        JSON.stringify(evidence),
+    );
   };
   await panel.loadURL(origin + '/login');
   await execute(
@@ -56,12 +64,15 @@ async function runWebSmoke({
     return;
   }
   const profile = await execute("window.multiBrowser.create('Conta web')");
+  const chatFixture = `<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><style>body{font:16px sans-serif;margin:12px}a{display:block;padding:12px;background:#f5f3ff}textarea{position:fixed;bottom:12px;left:12px;width:85%;height:50px}.bubble{padding:12px;background:#ede9fe;margin:12px 0}</style><title>Chat OLX local</title><a data-testid="chat-list-item" id="mobile" href="?chat-id=mobile"><span class="typo-caption">Produto de teste</span><div class="text-2">Cliente de teste</div><div class="text-1-5">Está disponível?</div><div class="text-1-5">Agora</div></a><div id="messages"></div><script>document.querySelector('a').onclick=e=>{e.preventDefault();history.pushState(null,'','?chat-id=mobile');document.querySelector('#messages').innerHTML='<p>Está disponível?</p><textarea aria-label="Mensagem"></textarea>';document.querySelector('textarea').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();const p=document.createElement('p');p.className='bubble';p.textContent=e.target.value;document.querySelector('#messages').prepend(p);window.sent=(window.sent||[]).concat(e.target.value);e.target.value='';}};};</script>`;
   const ses = await openSession(profile.id);
   ses.protocol.handle(
     'https',
-    () =>
+    (request) =>
       new Response(
-        '<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><title>OLX de teste</title><input id="message" style="position:absolute;left:20px;top:30px;width:240px;height:45px"><button style="position:absolute;left:20px;top:100px" onclick="document.body.dataset.clicked=\'yes\'">Confirmar</button>',
+        new URL(request.url).hostname === 'chat.olx.com.br'
+          ? chatFixture
+          : '<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><title>OLX de teste</title><input id="message" style="position:absolute;left:20px;top:30px;width:240px;height:45px"><button style="position:absolute;left:20px;top:100px" onclick="document.body.dataset.clicked=\'yes\'">Confirmar</button>',
         { headers: { 'Content-Type': 'text/html;charset=utf-8' } },
       ),
   );
@@ -116,6 +127,76 @@ async function runWebSmoke({
     return frame.status === 200 && frame.target === accountTarget;
   });
   // Create and persist a draft and photo through the authenticated HTTP bridge.
+  await execute('window.multiBrowser.unified()');
+  await wait(() => execute("document.querySelectorAll('.conversation-row').length>0"));
+  await execute("document.querySelector('.conversation-row').click()");
+  panel.show();
+  panel.focus();
+  await wait(() =>
+    execute(
+      "!document.querySelector('.remote-reply').hidden && document.getElementById('remoteImage').naturalWidth>0",
+    ),
+  );
+  for (const [width, height, label] of [
+    [412, 915, 'a33'],
+    [360, 800, 'compact'],
+    [412, 460, 'keyboard'],
+    [915, 412, 'landscape'],
+  ]) {
+    panel.setContentSize(width, height);
+    await new Promise((r) => setTimeout(r, 250));
+    await wait(async () => {
+      panel.focus();
+      return execute(
+        "document.getElementById('remoteImage').naturalWidth===Math.max(360,Math.round(document.querySelector('.remote-stage').clientWidth))",
+      );
+    });
+    const layout = await execute(
+      `(()=>{const r=document.getElementById('remoteMessage').getBoundingClientRect(),b=document.getElementById('remoteSend').getBoundingClientRect();return {width:innerWidth,scroll:document.documentElement.scrollWidth,bottom:b.bottom,fieldBottom:r.bottom,height:innerHeight,stage:document.querySelector('.remote-stage').clientHeight};})()`,
+    );
+    if (
+      layout.scroll > width + 2 ||
+      layout.bottom > height ||
+      layout.fieldBottom > height ||
+      layout.stage < 30
+    )
+      throw Error('Resposta móvel fora da tela: ' + JSON.stringify(layout));
+    await execute(
+      `document.getElementById('remoteMessage').value=${JSON.stringify('Resposta ' + label + ' — disponível!')};document.querySelector('.remote-reply').requestSubmit();`,
+    );
+    await wait(() => execute("!document.getElementById('remoteSend').disabled"));
+    if ((await execute("document.getElementById('remoteMessage').value")) !== '')
+      throw Error(
+        'Resposta não enviada: ' +
+          (await execute("document.querySelector('.remote-reply-notice').textContent")),
+      );
+    await fs.mkdir(artifactDirectory, { recursive: true });
+    await fs.writeFile(
+      path.join(artifactDirectory, 'web-chat-' + label + '.png'),
+      (await panel.webContents.capturePage()).toPNG(),
+    );
+  }
+  const sent = await views.get(profile.id).webContents.executeJavaScript('window.sent');
+  if (sent.length !== 4 || !sent.every((s) => s.includes('disponível!')))
+    throw Error('O envio móvel não chegou ao cliente de teste.');
+  await views
+    .get(profile.id)
+    .webContents.executeJavaScript("document.querySelector('textarea').readOnly=true");
+  await execute(
+    "document.getElementById('remoteMessage').value='Rascunho preservado';document.querySelector('.remote-reply').requestSubmit()",
+  );
+  await wait(() => execute("!document.getElementById('remoteSend').disabled"));
+  if ((await execute("document.getElementById('remoteMessage').value")) !== 'Rascunho preservado')
+    throw Error('O rascunho foi perdido após erro de envio.');
+  if ((await views.get(profile.id).webContents.executeJavaScript('window.sent')).length !== 4)
+    throw Error('Campo indisponível recebeu um envio indevido.');
+  await views
+    .get(profile.id)
+    .webContents.executeJavaScript("document.querySelector('textarea').readOnly=false");
+  console.log(
+    'MULTIOLX_MOBILE_CHAT_OK: resposta pela interface, A33 412px, 360px, teclado reduzido e paisagem, sem envios reais.',
+  );
+  await execute('window.multiBrowser.unified()');
   const bytes = nativeImage
     .createFromBitmap(Buffer.alloc(100 * 100 * 4, 255), { width: 100, height: 100 })
     .toPNG()

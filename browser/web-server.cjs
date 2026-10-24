@@ -284,6 +284,7 @@ async function createWebServer(options) {
         }
         res.setHeader('Content-Type', 'image/jpeg');
         res.setHeader('X-Remote-Target', String(frame.id));
+        res.setHeader('X-Remote-Popup', frame.popup ? '1' : '0');
         res.setHeader('X-Remote-Width', String(frame.width));
         res.setHeader('X-Remote-Height', String(frame.height));
         return res.end(frame.bytes);

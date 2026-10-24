@@ -9,6 +9,15 @@
       document.querySelector('header').offsetHeight + 'px',
     ),
   ).observe(document.querySelector('header'));
+  const updateScreen = () => {
+    const screen = window.visualViewport;
+    document.body.style.setProperty('--app-height', (screen?.height || innerHeight) + 'px');
+    document.body.style.setProperty('--app-top', (screen?.offsetTop || 0) + 'px');
+  };
+  window.visualViewport?.addEventListener('resize', updateScreen);
+  window.visualViewport?.addEventListener('scroll', updateScreen);
+  window.addEventListener('resize', updateScreen);
+  updateScreen();
   const listeners = new Map();
   let csrf = '',
     remoteTarget = 0,
@@ -129,9 +138,32 @@
     const open = document.body.classList.toggle('menu-open');
     menu.setAttribute('aria-expanded', String(open));
   };
+  menu.setAttribute('aria-controls', 'accountSidebar');
+  document.querySelector('aside').id = 'accountSidebar';
+  const backdrop = node('button');
+  backdrop.className = 'menu-backdrop';
+  backdrop.setAttribute('aria-label', 'Fechar menu de contas');
+  backdrop.onclick = () => {
+    document.body.classList.remove('menu-open');
+    menu.setAttribute('aria-expanded', 'false');
+  };
+  document.body.append(backdrop);
   const logout = node('button', 'Sair');
   logout.id = 'webLogout';
   document.querySelector('header').append(logout);
+  const resourceControls = document.querySelector('.resource-controls');
+  const mobileSettings = node('details');
+  mobileSettings.className = 'mobile-settings';
+  mobileSettings.append(node('summary', 'Desempenho'));
+  document.querySelector('aside').append(mobileSettings);
+  const mobileScreen = matchMedia('(max-width:760px), (max-width:1000px) and (max-height:500px)');
+  const placeResources = () => {
+    mobileSettings.hidden = !mobileScreen.matches;
+    if (mobileScreen.matches) mobileSettings.append(resourceControls);
+    else document.querySelector('header').insertBefore(resourceControls, logout);
+  };
+  mobileScreen.addEventListener('change', placeResources);
+  placeResources();
   logout.onclick = async () => {
     await request('/api/logout', {});
     stream?.close();
@@ -151,6 +183,11 @@
   image.alt = 'Navegador OLX no servidor';
   image.draggable = false;
   image.tabIndex = 0;
+  const stage = node('div');
+  stage.className = 'remote-stage';
+  stage.append(image);
+  const caption = node('p');
+  caption.className = 'remote-caption';
   const typing = node('form');
   typing.className = 'remote-typing';
   const text = node('input');
@@ -165,11 +202,69 @@
   };
   const send = node('button', 'Inserir');
   typing.append(text, reveal, send);
-  typing.onsubmit = (event) => {
+  typing.onsubmit = async (event) => {
     event.preventDefault();
     if (text.value) {
-      input({ action: 'text', text: text.value });
-      text.value = '';
+      const value = text.value;
+      try {
+        await input({ action: 'text', text: value }, true);
+        if (text.value === value) text.value = '';
+      } catch {}
+    }
+  };
+  const reply = node('form');
+  reply.className = 'remote-reply';
+  reply.hidden = true;
+  const message = node('textarea');
+  message.id = 'remoteMessage';
+  message.rows = 2;
+  message.placeholder = 'Escreva sua mensagem…';
+  message.setAttribute('aria-label', 'Mensagem para o cliente');
+  const sendMessage = node('button', 'Enviar');
+  sendMessage.id = 'remoteSend';
+  sendMessage.type = 'submit';
+  sendMessage.onpointerdown = (event) => {
+    if (document.activeElement === message) event.preventDefault();
+  };
+  const replyNotice = node('p');
+  replyNotice.className = 'remote-reply-notice';
+  replyNotice.setAttribute('role', 'status');
+  replyNotice.setAttribute('aria-live', 'polite');
+  reply.append(message, sendMessage, replyNotice);
+  const drafts = new Map();
+  let conversationKey = null,
+    sending = false;
+  reply.onsubmit = async (event) => {
+    event.preventDefault();
+    if (sending || !conversationKey || !message.value.trim()) return;
+    const key = conversationKey,
+      value = message.value;
+    let draft = drafts.get(key);
+    if (!draft || draft.text !== value) draft = { text: value, requestId: crypto.randomUUID() };
+    drafts.set(key, draft);
+    sending = true;
+    sendMessage.disabled = true;
+    sendMessage.textContent = 'Enviando…';
+    replyNotice.textContent = '';
+    try {
+      const result = await input(
+        { action: 'chat-send', conversationKey: key, text: value, requestId: draft.requestId },
+        true,
+      );
+      if (result.confirmed) {
+        drafts.delete(key);
+        if (conversationKey === key && message.value === value) message.value = '';
+      }
+      if (conversationKey === key)
+        replyNotice.textContent = result.confirmed
+          ? 'Mensagem enviada ao chat.'
+          : 'O envio não foi confirmado. Confira na conversa antes de tentar novamente.';
+    } catch (error) {
+      if (conversationKey === key) replyNotice.textContent = error.message;
+    } finally {
+      sending = false;
+      sendMessage.disabled = false;
+      sendMessage.textContent = 'Enviar';
     }
   };
   const keys = node('div');
@@ -193,14 +288,20 @@
     b.onclick = () => input({ action: 'scroll', delta });
     keys.append(b);
   }
-  panel.append(toolbar, image, typing, keys);
+  const controls = node('details');
+  controls.className = 'remote-extra';
+  const summary = node('summary', 'Teclado e rolagem');
+  controls.append(summary, keys);
+  panel.append(toolbar, caption, stage, typing, reply, controls);
   document.querySelector('main').append(panel);
-  const input = (command) => {
+  const input = (command, strict = false) => {
+    const payload = { target: remoteTarget, ...command };
     inputQueue = inputQueue
       .catch(() => {})
-      .then(() => request('/api/input', { target: remoteTarget, ...command }))
+      .then(() => request('/api/input', payload))
       .catch((error) => {
         document.getElementById('status').textContent = error.message;
+        if (strict) throw error;
       });
     return inputQueue;
   };
@@ -267,6 +368,29 @@
   function showRemote(state) {
     if (state.mode) mode = state.mode;
     if (state.hasView !== undefined) hasView = state.hasView;
+    let nextKey = conversationKey;
+    if (state.conversationKey !== undefined) nextKey = state.conversationKey || null;
+    if (
+      state.location === 'Chats unificados' ||
+      state.mode === 'listings' ||
+      state.mode === 'individual' ||
+      state.hasView === false
+    )
+      nextKey = null;
+    if (nextKey !== conversationKey) {
+      if (conversationKey && message.value) {
+        const before = drafts.get(conversationKey);
+        if (!before || before.text !== message.value)
+          drafts.set(conversationKey, { text: message.value, requestId: crypto.randomUUID() });
+      }
+      conversationKey = nextKey;
+      message.value = drafts.get(nextKey)?.text || '';
+      replyNotice.textContent = '';
+    }
+    reply.hidden = !conversationKey;
+    typing.hidden = !!conversationKey;
+    back.textContent = conversationKey ? '← Conversas' : '← Painel';
+    caption.textContent = state.location || caption.textContent;
     if (state.profileId !== undefined || state.mode) {
       document.body.classList.remove('menu-open');
       menu.setAttribute('aria-expanded', 'false');
@@ -289,6 +413,7 @@
       }
       if (!response.ok || response.status === 204) return;
       remoteTarget = Number(response.headers.get('X-Remote-Target'));
+      closePopup.hidden = response.headers.get('X-Remote-Popup') !== '1';
       const blob = await response.blob();
       const next = URL.createObjectURL(blob);
       image.onload = () => {
@@ -296,8 +421,8 @@
         objectUrl = next;
       };
       image.src = next;
-      const width = Math.max(360, Math.min(1600, Math.round(panel.clientWidth))),
-        height = Math.max(400, Math.min(1000, Math.round(innerHeight - 220)));
+      const width = Math.max(360, Math.min(1600, Math.round(stage.clientWidth))),
+        height = Math.max(320, Math.min(1000, Math.round(stage.clientHeight)));
       const viewport = `${remoteTarget}:${width}:${height}`;
       if (lastViewport !== viewport) {
         lastViewport = viewport;

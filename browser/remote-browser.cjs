@@ -1,4 +1,13 @@
-function createRemoteBrowser({ window: windowFor, view: viewFor, popups, owner, busy }) {
+const { chatComposerDocument } = require('./remote-composer.cjs');
+function createRemoteBrowser({
+  window: windowFor,
+  view: viewFor,
+  popups,
+  owner,
+  busy,
+  conversation = () => null,
+}) {
+  const submissions = new Map();
   let queue = Promise.resolve(),
     viewport = { width: 1100, height: 780 };
   function target() {
@@ -34,7 +43,7 @@ function createRemoteBrowser({ window: windowFor, view: viewFor, popups, owner, 
           stayAwake: true,
         });
         if (image.isEmpty()) return null;
-        return { id: t.contents.id, ...image.getSize(), bytes: image.toJPEG(75) };
+        return { id: t.contents.id, popup: t.popup, ...image.getSize(), bytes: image.toJPEG(75) };
       }),
     input: (command) =>
       serialize(async () => {
@@ -65,7 +74,58 @@ function createRemoteBrowser({ window: windowFor, view: viewFor, popups, owner, 
         t.window.show();
         t.window.focus();
         t.contents.focus();
-        if (command.action === 'click') {
+        if (command.action === 'chat-send') {
+          const context = conversation();
+          if (
+            t.popup ||
+            !context ||
+            context.key !== command.conversationKey ||
+            context.profileId !== owner()
+          )
+            throw Error('A conversa mudou. Reabra a conversa antes de enviar.');
+          if (
+            typeof command.text !== 'string' ||
+            !command.text.trim() ||
+            command.text.length > 10000 ||
+            !/^[a-f0-9-]{36}$/i.test(command.requestId || '')
+          )
+            throw Error('Mensagem inválida.');
+          const key = t.contents.id + ':' + command.requestId;
+          const previous = submissions.get(key);
+          if (previous) {
+            if (previous.text !== command.text || previous.conversationKey !== context.key)
+              throw Error('Este envio já foi utilizado.');
+            return previous.result;
+          }
+          const focused = await t.contents.executeJavaScript(
+            `(${chatComposerDocument.toString()})(${JSON.stringify({ ...context, phase: 'focus' })})`,
+          );
+          if (!focused.focused) throw Error('Não foi possível selecionar o campo de mensagem.');
+          if (target()?.contents !== t.contents || conversation()?.key !== context.key)
+            throw Error('A conversa mudou durante o envio. Confira o campo antes de continuar.');
+          await t.contents.insertText(command.text);
+          if (target()?.contents !== t.contents || conversation()?.key !== context.key)
+            throw Error('A conversa mudou durante o envio. O texto não foi enviado.');
+          // Register before dispatch: a lost HTTP response must never repeat Enter.
+          const result = { submitted: true, confirmed: false };
+          submissions.set(key, { text: command.text, conversationKey: context.key, result });
+          if (submissions.size > 100) submissions.delete(submissions.keys().next().value);
+          t.contents.sendInputEvent({ type: 'keyDown', keyCode: 'Enter' });
+          t.contents.sendInputEvent({ type: 'keyUp', keyCode: 'Enter' });
+          for (let i = 0; i < 20; i++) {
+            await new Promise((r) => setTimeout(r, 100));
+            const state = await t.contents
+              .executeJavaScript(
+                `(${chatComposerDocument.toString()})(${JSON.stringify({ ...context, phase: 'check' })})`,
+              )
+              .catch(() => null);
+            if (state?.empty) {
+              result.confirmed = true;
+              break;
+            }
+          }
+          return result;
+        } else if (command.action === 'click') {
           if (
             !Number.isFinite(command.x) ||
             !Number.isFinite(command.y) ||

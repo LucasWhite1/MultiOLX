@@ -19,7 +19,13 @@ async function runWebSmoke({
     height: 844,
     minWidth: 300,
     show: true,
-    webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false },
+    // The server's native window shares this test desktop and would occlude the client.
+    webPreferences: {
+      sandbox: true,
+      contextIsolation: true,
+      nodeIntegration: false,
+      backgroundThrottling: false,
+    },
   });
   const errors = [];
   panel.webContents.on('console-message', (_event, level, message) => {
@@ -137,6 +143,26 @@ async function runWebSmoke({
       "!document.querySelector('.remote-reply').hidden && document.getElementById('remoteImage').naturalWidth>0",
     ),
   );
+  await views.get(profile.id).webContents.executeJavaScript(`(()=>{
+    document.getElementById('messages').setAttribute('aria-hidden','true');
+    const dialog=document.createElement('div');dialog.id='mobile-promotion';dialog.setAttribute('role','dialog');dialog.style.cssText='position:fixed;inset:0;background:white;z-index:100';
+    const heading=document.createElement('h2');heading.textContent='Evoluímos para você negociar com mais segurança';heading.style.width='100%';
+    const close=document.createElement('button');close.setAttribute('aria-label','Fechar aviso');close.textContent='Entendi';close.onclick=()=>{document.getElementById('messages').removeAttribute('aria-hidden');dialog.remove();};
+    dialog.append(heading,close);document.body.append(dialog);
+  })()`);
+  panel.focus();
+  await execute("document.getElementById('remoteMessage').focus()");
+  await wait(() =>
+    execute(
+      "document.querySelector('.remote-reply-notice').textContent.includes('pronto para responder')",
+    ),
+  );
+  if (
+    await views
+      .get(profile.id)
+      .webContents.executeJavaScript("!!document.getElementById('mobile-promotion')")
+  )
+    throw Error('Aviso da OLX continuou bloqueando o campo no mobile.');
   for (const [width, height, label] of [
     [412, 915, 'a33'],
     [360, 800, 'compact'],

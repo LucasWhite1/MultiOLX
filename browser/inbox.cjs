@@ -157,13 +157,13 @@ function dismissAppPromotion() {
     );
     for (let panel = heading; panel && panel !== document.body; panel = panel.parentElement) {
       const bounds = panel.getBoundingClientRect();
-      if (bounds.width >= innerWidth * 0.95) break;
       const close = [...panel.querySelectorAll('button,[role="button"]')].find((button) => {
         const rect = button.getBoundingClientRect(),
           label = button.getAttribute('aria-label') || button.getAttribute('title') || '';
         return (
           rect.width > 0 &&
           (/fechar|close|dispensar/i.test(label) ||
+            /^(entendi|agora não|fechar|ok|continuar|vamos lá)$/i.test(button.innerText.trim()) ||
             (!button.innerText.trim() &&
               rect.width <= 60 &&
               rect.height <= 60 &&

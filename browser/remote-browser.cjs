@@ -1,4 +1,5 @@
 const { chatComposerDocument } = require('./remote-composer.cjs');
+const { dismissAppPromotion } = require('./inbox.cjs');
 function createRemoteBrowser({
   window: windowFor,
   view: viewFor,
@@ -29,6 +30,10 @@ function createRemoteBrowser({
     return next;
   };
   async function composer(contents, context) {
+    if (context.platform !== 'facebook-marketplace') {
+      const dismissed = await contents.executeJavaScript(`(${dismissAppPromotion.toString()})()`);
+      if (dismissed === true) await new Promise((r) => setTimeout(r, 100));
+    }
     const result = await contents.executeJavaScript(
       `(()=>{try{return (${chatComposerDocument.toString()})(${JSON.stringify(context)})}catch(error){return {error:error.message}}})()`,
     );

@@ -10,7 +10,7 @@ Há um administrador e um espaço de trabalho: todos os dispositivos autorizados
 
 1. As credenciais geradas nesta preparação estão em `data/vps-credentials.txt` no seu computador. Para uma instalação nova que ainda não tenha esse arquivo, execute `npm run credentials`. O comando cria `data/vps-credentials.txt`, que é ignorado pelo Git. Não sobrescreve um arquivo existente. O arquivo contém seu usuário, senha forte gerada e as variáveis necessárias. Guarde-o em local privado.
 2. Escolha um subdomínio, por exemplo `multiolx.seudominio.com.br`, apontado para a VPS.
-3. No Easypanel, crie um projeto e um serviço **Compose**, com origem **Git**, URL `https://github.com/LucasWhite1/MultiOLX`, branch `main`, Build Path `/` e Docker Compose File **`compose.yml`**. O Compose constrói a imagem pelo Dockerfile e aplica o perfil de sandbox necessário. O repositório é privado; adicione a chave SSH pública mostrada pelo serviço como deploy key somente de leitura no GitHub. Use a URL SSH `git@github.com:LucasWhite1/MultiOLX.git` quando usar essa chave.
+3. No Easypanel, crie um projeto e um serviço **Compose**, com origem **Git**, URL `https://github.com/LucasWhite1/MultiOLX`, branch `codex/facebook-marketplace` (versão com Marketplace e correções de inicialização), Build Path `/` e Docker Compose File **`compose.yml`**. O Compose constrói a imagem pelo Dockerfile e aplica o perfil de sandbox necessário. Se o repositório for privado, adicione a chave SSH pública mostrada pelo serviço como deploy key somente de leitura no GitHub. Use a URL SSH `git@github.com:LucasWhite1/MultiOLX.git` quando usar essa chave.
 4. Em **Environment**, habilite **Create .env file** e configure as variáveis abaixo com os valores do arquivo privado:
 
 ```dotenv
@@ -29,6 +29,8 @@ PORT=3000
 8. Abra o domínio e entre com o usuário e a senha do arquivo privado.
 
 O Dockerfile usa usuário não privilegiado, sandbox por user namespaces do Chromium, Xvfb local sem porta TCP e gerenciador de janelas dentro do container. O Compose remove todas as capabilities e impede elevação de privilégios. O perfil `deploy/chromium-seccomp.json`, derivado do padrão do Moby, permite os syscalls de namespaces e chroot necessários ao sandbox. O helper legado SUID não é utilizado. As exigências de user namespaces do host precisam ser atendidas; não adicione `--no-sandbox` ou modo privilegiado para esconder um erro de inicialização. Consulte a seção de diagnóstico se o host impedir o sandbox.
+
+A seleção `--disable-setuid-sandbox` acontece no comando de lançamento do Electron, antes de carregar o JavaScript. Defini-la apenas com `app.commandLine.appendSwitch` é tarde para a inicialização do zygote. Isso seleciona o sandbox por namespaces; não desativa esse sandbox. O Compose de produção não publica portas no host: use o proxy HTTPS do Easypanel, apontando para o serviço interno `multiolx:3000`. A porta 3000 do host pode já pertencer ao próprio painel. O arquivo `compose.local.yml` mantém a publicação em localhost apenas para desenvolvimento.
 
 ## Primeiro acesso às contas OLX
 

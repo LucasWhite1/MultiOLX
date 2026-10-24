@@ -74,7 +74,7 @@ function createRemoteBrowser({
         t.window.show();
         t.window.focus();
         t.contents.focus();
-        if (command.action === 'chat-send') {
+        if (command.action === 'chat-send' || command.action === 'chat-check') {
           const context = conversation();
           if (
             t.popup ||
@@ -83,6 +83,13 @@ function createRemoteBrowser({
             context.profileId !== owner()
           )
             throw Error('A conversa mudou. Reabra a conversa antes de enviar.');
+          if (command.action === 'chat-check')
+            return {
+              ready: true,
+              ...(await t.contents.executeJavaScript(
+                `(${chatComposerDocument.toString()})(${JSON.stringify({ ...context, phase: 'check' })})`,
+              )),
+            };
           if (
             typeof command.text !== 'string' ||
             !command.text.trim() ||

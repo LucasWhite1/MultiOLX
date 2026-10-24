@@ -234,6 +234,19 @@
   const drafts = new Map();
   let conversationKey = null,
     sending = false;
+  message.onfocus = async () => {
+    if (!conversationKey || sending || !remoteTarget) return;
+    const key = conversationKey;
+    try {
+      const result = await input({ action: 'chat-check', conversationKey: key }, true);
+      if (conversationKey === key)
+        replyNotice.textContent = result.empty
+          ? 'Campo da conversa pronto para responder.'
+          : 'Há texto no campo da OLX. Confira o rascunho antes de enviar.';
+    } catch (error) {
+      if (conversationKey === key) replyNotice.textContent = error.message;
+    }
+  };
   reply.onsubmit = async (event) => {
     event.preventDefault();
     if (sending || !conversationKey || !message.value.trim()) return;

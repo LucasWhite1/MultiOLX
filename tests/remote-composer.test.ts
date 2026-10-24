@@ -61,6 +61,15 @@ it('recusa conversa ou página que mudou antes de enviar', async () => {
   await expect(f.remote.input(f.command)).rejects.toThrow('conversa mudou');
   expect(f.texts).toHaveLength(0);
 });
+it('verifica disponibilidade do campo sem inserir texto nem apertar Enter', async () => {
+  const f = fixture();
+  expect(await f.remote.input({ ...f.command, action: 'chat-check' })).toEqual({
+    ready: true,
+    empty: true,
+  });
+  expect(f.texts).toHaveLength(0);
+  expect(f.events).toHaveLength(0);
+});
 it('não aperta Enter se outra conversa for aberta enquanto o campo recebe foco', async () => {
   const f = fixture();
   f.contents.executeJavaScript = async () => {

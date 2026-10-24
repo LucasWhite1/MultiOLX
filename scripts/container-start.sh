@@ -12,7 +12,9 @@ sleep 1
 eval "$(dbus-launch --sh-syntax)"
 openbox >/dev/null 2>&1 &
 wm_pid=$!
-/app/node_modules/electron/dist/electron /app/browser/main.cjs "$@" &
+# Chromium initializes the zygote before app JavaScript can select its sandbox.
+# Keep the namespace sandbox enabled; the legacy SUID helper is deliberately absent.
+/app/node_modules/electron/dist/electron --disable-setuid-sandbox /app/browser/main.cjs "$@" &
 app_pid=$!
 trap 'kill -TERM "$app_pid" 2>/dev/null || true' TERM INT
 set +e

@@ -50,8 +50,20 @@ function chatComposerDocument(context) {
         (n.getAttribute('aria-label') || '') + ' ' + (n.getAttribute('placeholder') || ''),
       ),
   );
-  if (candidates.length !== 1)
-    throw Error('O campo de mensagem ainda não está disponível. Aguarde o chat carregar.');
+  if (candidates.length !== 1) {
+    return {
+      error: 'O campo de mensagem ainda não está disponível. Aguarde o chat carregar.',
+      diagnostic: [
+        ...scope.querySelectorAll('textarea,input,[contenteditable],[role=textbox]'),
+      ].map((n) => ({
+        tag: n.tagName,
+        type: n.getAttribute('type'),
+        role: n.getAttribute('role'),
+        editable: n.getAttribute('contenteditable'),
+        visible: !!visible(n),
+      })),
+    };
+  }
   const field = candidates[0],
     value = field.value ?? field.innerText;
   if (context.phase === 'check') return { empty: !value.trim() };

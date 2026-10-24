@@ -28,6 +28,17 @@ function createRemoteBrowser({
     queue = next;
     return next;
   };
+  async function composer(contents, context) {
+    const result = await contents.executeJavaScript(
+      `(()=>{try{return (${chatComposerDocument.toString()})(${JSON.stringify(context)})}catch(error){return {error:error.message}}})()`,
+    );
+    if (result.error) {
+      if (result.diagnostic)
+        console.warn('REMOTE_COMPOSER_LAYOUT ' + JSON.stringify(result.diagnostic));
+      throw Error(result.error);
+    }
+    return result;
+  }
   return {
     frame: () =>
       serialize(async () => {
@@ -86,9 +97,7 @@ function createRemoteBrowser({
           if (command.action === 'chat-check')
             return {
               ready: true,
-              ...(await t.contents.executeJavaScript(
-                `(${chatComposerDocument.toString()})(${JSON.stringify({ ...context, phase: 'check' })})`,
-              )),
+              ...(await composer(t.contents, { ...context, phase: 'check' })),
             };
           if (
             typeof command.text !== 'string' ||
@@ -104,9 +113,7 @@ function createRemoteBrowser({
               throw Error('Este envio já foi utilizado.');
             return previous.result;
           }
-          const focused = await t.contents.executeJavaScript(
-            `(${chatComposerDocument.toString()})(${JSON.stringify({ ...context, phase: 'focus' })})`,
-          );
+          const focused = await composer(t.contents, { ...context, phase: 'focus' });
           if (!focused.focused) throw Error('Não foi possível selecionar o campo de mensagem.');
           if (target()?.contents !== t.contents || conversation()?.key !== context.key)
             throw Error('A conversa mudou durante o envio. Confira o campo antes de continuar.');
@@ -121,11 +128,9 @@ function createRemoteBrowser({
           t.contents.sendInputEvent({ type: 'keyUp', keyCode: 'Enter' });
           for (let i = 0; i < 20; i++) {
             await new Promise((r) => setTimeout(r, 100));
-            const state = await t.contents
-              .executeJavaScript(
-                `(${chatComposerDocument.toString()})(${JSON.stringify({ ...context, phase: 'check' })})`,
-              )
-              .catch(() => null);
+            const state = await composer(t.contents, { ...context, phase: 'check' }).catch(
+              () => null,
+            );
             if (state?.empty) {
               result.confirmed = true;
               break;

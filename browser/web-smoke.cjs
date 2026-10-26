@@ -87,9 +87,12 @@ async function runWebSmoke({
       new Response(
         new URL(request.url).hostname === 'chat.olx.com.br'
           ? chatFixture
-          : new URL(request.url).pathname === '/anuncios/publicados'
-            ? require('../scripts/ad-management-fixture.cjs').adManagementFixture()
-            : '<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><title>OLX de teste</title><input id="message" style="position:absolute;left:20px;top:30px;width:240px;height:45px"><button style="position:absolute;left:20px;top:100px" onclick="document.body.dataset.clicked=\'yes\'">Confirmar</button>',
+          : new URL(request.url).hostname === 'adquirir.olx.com.br' &&
+              new URL(request.url).pathname === '/destaques'
+            ? require('../scripts/ad-management-fixture.cjs').adDeletionOfferFixture()
+            : new URL(request.url).pathname === '/anuncios/publicados'
+              ? require('../scripts/ad-management-fixture.cjs').adManagementFixture()
+              : '<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><title>OLX de teste</title><input id="message" style="position:absolute;left:20px;top:30px;width:240px;height:45px"><button style="position:absolute;left:20px;top:100px" onclick="document.body.dataset.clicked=\'yes\'">Confirmar</button>',
         { headers: { 'Content-Type': 'text/html;charset=utf-8' } },
       ),
   );

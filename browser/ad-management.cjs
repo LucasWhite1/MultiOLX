@@ -214,20 +214,57 @@ function createAdManagement(options) {
                   message: 'Exclusão solicitada. Confira na OLX antes de repetir.',
                 });
                 confirmationAttempted = true;
-                const confirmation = await call(contents, {
-                  action: 'confirm-delete',
-                  id: result.id,
-                });
+                let confirmation;
+                try {
+                  confirmation = await call(contents, { action: 'confirm-delete', id: result.id });
+                } catch (error) {
+                  if (error.beforeClick) throw error;
+                  // Navigation can destroy the execution context after the click.
+                  // Observe the result; never repeat an action whose response was lost.
+                  submitted = true;
+                  break;
+                }
                 if (confirmation.submitted) {
                   submitted = true;
                   break;
                 }
               }
               if (!submitted) throw Error('A OLX não confirmou a etapa final de exclusão.');
-              for (let i = 0; i < 20; i++) {
+              let offerSubmitted = false;
+              for (let i = 0; i < 60; i++) {
                 await pause(300);
-                if ((await call(contents, { action: 'verify-delete', id: result.id })).deleted)
-                  return true;
+                let observed;
+                try {
+                  observed = await call(contents, { action: 'verify-delete', id: result.id });
+                } catch (error) {
+                  if (offerSubmitted) break;
+                  throw error;
+                }
+                if (observed.deleted) return true;
+                if (observed.offer && !offerSubmitted) {
+                  await options.journal({
+                    ...result,
+                    status: 'UNCERTAIN',
+                    message: 'Confirmando Excluir na etapa de destaques, sem contratar produto.',
+                  });
+                  let next;
+                  try {
+                    next = await call(contents, { action: 'confirm-offer-delete', id: result.id });
+                  } catch (error) {
+                    if (error.beforeClick) throw error;
+                    offerSubmitted = true;
+                    continue;
+                  }
+                  if (next.submitted) offerSubmitted = true;
+                }
+              }
+              if (offerSubmitted) {
+                await contents.loadURL(listUrl);
+                let remains = false;
+                await walk(contents, async (page) => {
+                  if (page.items.some((r) => r.id === result.id)) remains = true;
+                });
+                if (!remains) return true;
               }
               throw Error(
                 'A OLX ainda não confirmou a exclusão. Confira Meus anúncios antes de repetir.',

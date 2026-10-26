@@ -16,7 +16,10 @@ function fixture() {
   ];
   let noConfirmation = false,
     changed = false,
-    journalFails = false;
+    journalFails = false,
+    offer = false,
+    freeSelected = false,
+    offerSubmitted = false;
   const contents = {
     isDestroyed: () => false,
     setBackgroundThrottling: () => {},
@@ -28,9 +31,20 @@ function fixture() {
       if (command.action === 'open-delete')
         return changed ? { error: 'O anúncio mudou' } : { clicked: true };
       if (command.action === 'confirm-delete') {
-        if (!noConfirmation) items = [];
+        if (!noConfirmation && !offer) items = [];
         return { submitted: true };
       }
+      if (command.action === 'confirm-offer-delete') {
+        if (!freeSelected) {
+          freeSelected = true;
+          return { selected: true };
+        }
+        if (offerSubmitted) throw Error('Continuar foi repetido');
+        offerSubmitted = true;
+        items = [];
+        return { submitted: true };
+      }
+      if (command.action === 'verify-delete' && offer && !offerSubmitted) return { offer: true };
       if (command.action === 'verify-delete') return { deleted: !noConfirmation };
       throw Error('Unexpected command');
     },
@@ -61,6 +75,7 @@ function fixture() {
     changed: () => (changed = true),
     noConfirmation: () => (noConfirmation = true),
     failJournal: () => (journalFails = true),
+    withOffer: () => (offer = true),
   };
 }
 it('agrupa espaços e caixa sem confundir títulos diferentes', () => {
@@ -149,4 +164,16 @@ it('abre a página existente da conta para conferir sem clicar nem reenviar a ex
   f.calls.length = 0;
   await f.manager.open('a');
   expect(f.calls).toEqual([{ action: 'focus-existing', owner: 'a' }]);
+});
+it('acompanha a etapa de destaques e confirma Excluir uma única vez', async () => {
+  const f = fixture();
+  f.withOffer();
+  f.manager.scan(['a']);
+  await f.manager.wait();
+  const review = f.manager.prepare([f.manager.snapshot().items[0].key]);
+  f.manager.remove(review.token);
+  await f.manager.wait();
+  expect(f.manager.snapshot().results[0].status).toBe('DELETED');
+  expect(f.calls.filter((r) => r.action === 'confirm-delete')).toHaveLength(1);
+  expect(f.calls.filter((r) => r.action === 'confirm-offer-delete')).toHaveLength(2);
 });

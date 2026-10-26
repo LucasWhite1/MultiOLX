@@ -5,6 +5,53 @@ function adManagementDocument(command = {}) {
     !!n && n.getClientRects().length > 0 && getComputedStyle(n).visibility !== 'hidden';
   const label = (n) => normalize(n.getAttribute('aria-label') || n.innerText || n.title);
   const fail = (error) => ({ error });
+  const deletionOffer =
+    location.origin === 'https://adquirir.olx.com.br' &&
+    location.pathname === '/destaques' &&
+    new URL(location.href).searchParams.get('action') === 'deletion';
+  if (deletionOffer && command.action === 'verify-delete') return { offer: true };
+  if (deletionOffer && command.action === 'confirm-offer-delete') {
+    const radios = [...document.querySelectorAll('input[type=radio]')];
+    const choices = radios.filter((radio) => {
+      if (radio.disabled) return false;
+      for (
+        let card = radio.parentElement;
+        card && card !== document.body;
+        card = card.parentElement
+      ) {
+        if (card.querySelectorAll('input[type=radio]').length !== 1) break;
+        if (
+          /Seu anúncio será excluído da OLX/i.test(card.innerText) &&
+          /\bExcluir\b/i.test(card.innerText) &&
+          !/R\$/.test(card.innerText)
+        )
+          return true;
+      }
+      return false;
+    });
+    if (choices.length !== 1)
+      return {
+        waiting: true,
+        reason:
+          'A opção gratuita Excluir ainda não ficou disponível. Nenhum destaque foi selecionado.',
+      };
+    const choice = choices[0];
+    if (!choice.checked) {
+      choice.click();
+      return { selected: true };
+    }
+    if (radios.some((n) => n !== choice && n.checked))
+      return fail(
+        'Há outra opção selecionada. A exclusão foi interrompida para evitar contratar um destaque.',
+      );
+    const buttons = [...document.querySelectorAll('button')].filter(
+      (n) => visible(n) && !n.disabled && /^Continuar$/i.test(label(n)),
+    );
+    if (buttons.length !== 1)
+      return { waiting: true, reason: 'O botão Continuar da exclusão ainda não está disponível.' };
+    buttons[0].click();
+    return { submitted: true };
+  }
   if (
     location.origin !== 'https://conta.olx.com.br' ||
     location.pathname !== '/anuncios/publicados'
@@ -186,9 +233,10 @@ function adManagementDocument(command = {}) {
   }
   if (command.action === 'verify-delete') {
     const dialogs = [...document.querySelectorAll('[role=dialog],dialog[open]')].filter(visible);
-    const success = /anúncio (excluído|removido)( com sucesso)?|excluído com sucesso/i.test(
-      document.body.innerText,
-    );
+    const success =
+      /anúncio (?:foi )?(excluído|removido)( com sucesso)?|excluído com sucesso/i.test(
+        document.body.innerText,
+      );
     return {
       deleted: success && !row && dialogs.every((d) => !/confirmar|tem certeza/i.test(d.innerText)),
     };

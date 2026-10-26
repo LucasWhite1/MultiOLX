@@ -22,6 +22,7 @@ const channels = new Set([
   'listings:list',
   'listings:managed-scan',
   'listings:managed-state',
+  'listings:managed-open',
   'listings:managed-review',
   'listings:managed-delete',
   'listings:managed-cancel',

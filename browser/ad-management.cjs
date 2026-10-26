@@ -8,6 +8,7 @@ function createAdManagement(options) {
   let work = Promise.resolve(),
     review = null,
     cancelled = false;
+  const pages = new Map();
   const snapshot = () => structuredClone(state);
   const pause = options.pause || ((ms) => new Promise((r) => setTimeout(r, ms)));
   const call = async (contents, command) => {
@@ -41,6 +42,7 @@ function createAdManagement(options) {
     let contents;
     try {
       contents = await options.open(owner, listUrl);
+      pages.set(owner, contents);
       options.workers.set(owner, contents);
       return await fn(contents);
     } finally {
@@ -259,6 +261,13 @@ function createAdManagement(options) {
     prepare,
     remove,
     snapshot,
+    open: async (owner) => {
+      const contents = pages.get(owner);
+      if (!contents || contents.isDestroyed())
+        throw Error('A página anterior foi fechada. Consulte os anúncios novamente.');
+      await options.focus(owner, contents);
+      return { ok: true };
+    },
     active: () => state.running,
     wait: () => work,
     cancel: () => {

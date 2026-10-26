@@ -54,6 +54,7 @@ function createListingService(options) {
     workers,
     blocked: () => batchActive() || publisherBusy,
     open: (owner, url) => openPublisher(owner, {}, { background: true, url }),
+    focus: (owner, contents) => options.focusPublisher(owner, contents, contents.getURL()),
     journal: async (result) => {
       const entry = { ...result, updatedAt: new Date().toISOString() };
       const next = [...deletionHistory.filter((r) => r.key !== result.key), entry].slice(-500);
@@ -193,6 +194,7 @@ function createListingService(options) {
   handle('listings:managed-review', (keys) => adManager.prepare(keys));
   handle('listings:managed-delete', (token) => adManager.remove(token));
   handle('listings:managed-cancel', () => adManager.cancel());
+  handle('listings:managed-open', (owner) => adManager.open(owner));
   handle('listings:ai-status', () => options.ai.status());
   handle('listings:ai-configure', (input) => options.ai.configure(input));
   handle('listings:ai-test', () => options.ai.test());

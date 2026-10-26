@@ -1123,7 +1123,7 @@ async function start() {
     window: () => win,
     publisherActive: (owner, contents) =>
       active === owner && displayedView?.webContents === contents,
-    focusPublisher: async (owner, contents) => {
+    focusPublisher: async (owner, contents, location = 'Preparar anúncio') => {
       const view = views.get(owner);
       if (!view || view.webContents !== contents)
         throw new Error('O formulário anterior foi fechado. Confira seu resultado na OLX.');
@@ -1134,7 +1134,7 @@ async function start() {
         mode,
         profileId: owner,
         source: profiles.find((p) => p.id === owner).name,
-        location: 'Preparar anúncio',
+        location,
       });
     },
     showWorkspace: () => {

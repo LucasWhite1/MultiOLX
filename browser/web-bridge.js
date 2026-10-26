@@ -83,6 +83,7 @@
     listListings: 'listings:list',
     scanManagedAds: 'listings:managed-scan',
     managedAds: 'listings:managed-state',
+    openManagedAd: 'listings:managed-open',
     reviewAdRemoval: 'listings:managed-review',
     removeAds: 'listings:managed-delete',
     cancelAdManagement: 'listings:managed-cancel',

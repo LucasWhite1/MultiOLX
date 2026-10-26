@@ -103,6 +103,13 @@
           );
           remove.onclick = () => prepare([item.key]).catch(error);
           row.append(label, remove);
+          const open = node('button', 'Abrir conta na OLX');
+          open.type = 'button';
+          open.disabled = state.running;
+          if (item.deleteDestination)
+            open.title = 'Destino da exclusão na OLX: ' + item.deleteDestination;
+          open.onclick = () => api.openManagedAd(item.owner).catch(error);
+          row.append(open);
           card.append(row);
           if (item.canDelete === false)
             card.append(
@@ -167,6 +174,15 @@
           node('strong', `${r.profileName} · ${r.title} · ID ${r.id}`),
           node('p', `${statuses[r.status] || r.status}: ${r.message}`),
         );
+        if (['ERROR', 'UNCERTAIN'].includes(r.status)) {
+          if (r.deleteDestination)
+            row.append(node('p', 'Destino da confirmação na OLX: ' + r.deleteDestination, 'hint'));
+          const inspect = node('button', 'Conferir na OLX');
+          inspect.type = 'button';
+          inspect.disabled = state.running;
+          inspect.onclick = () => api.openManagedAd(r.owner).catch(error);
+          row.append(inspect);
+        }
         return row;
       }),
     );

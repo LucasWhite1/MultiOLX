@@ -9,7 +9,9 @@ function adManagementDocument(command = {}) {
     location.origin !== 'https://conta.olx.com.br' ||
     location.pathname !== '/anuncios/publicados'
   )
-    return fail('Abra Meus anúncios nesta conta OLX; pode ser necessário entrar novamente.');
+    return fail(
+      `A OLX abriu outra página (${location.origin}${location.pathname}). A exclusão não foi confirmada.`,
+    );
   if (command.action === 'dismiss-tour') {
     const heading = [
       ...document.querySelectorAll('h1,h2,h3,h4,p,strong,span,div,[role=heading]'),
@@ -95,6 +97,9 @@ function adManagementDocument(command = {}) {
         title,
         price,
         url,
+        deleteDestination:
+          controls.find((n) => /^(excluir( anúncio)?|apagar( anúncio)?)$/i.test(label(n)))?.href ||
+          '',
         canDelete:
           controls.filter((n) =>
             /^(excluir( anúncio)?|excluir permanentemente|apagar( anúncio)?)$/i.test(label(n)),

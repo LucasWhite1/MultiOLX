@@ -24,6 +24,7 @@ contextBridge.exposeInMainWorld('multiBrowser', {
   listListings: () => ipcRenderer.invoke('listings:list'),
   scanManagedAds: (owners) => ipcRenderer.invoke('listings:managed-scan', owners),
   managedAds: () => ipcRenderer.invoke('listings:managed-state'),
+  openManagedAd: (owner) => ipcRenderer.invoke('listings:managed-open', owner),
   reviewAdRemoval: (keys) => ipcRenderer.invoke('listings:managed-review', keys),
   removeAds: (token) => ipcRenderer.invoke('listings:managed-delete', token),
   cancelAdManagement: () => ipcRenderer.invoke('listings:managed-cancel'),

@@ -10,6 +10,32 @@ function adManagementDocument(command = {}) {
     location.pathname !== '/anuncios/publicados'
   )
     return fail('Abra Meus anúncios nesta conta OLX; pode ser necessário entrar novamente.');
+  if (command.action === 'dismiss-tour') {
+    const heading = [
+      ...document.querySelectorAll('h1,h2,h3,h4,p,strong,span,div,[role=heading]'),
+    ].find(
+      (n) => visible(n) && normalize(n.innerText) === 'Faça a entrega pela OLX, é fácil e gratuito',
+    );
+    if (!heading) return { dismissed: false };
+    for (
+      let scope = heading.parentElement;
+      scope && scope !== document.body;
+      scope = scope.parentElement
+    ) {
+      if (scope.innerText.length > 2500) break;
+      const close = [...scope.querySelectorAll('button,[role=button]')].filter(
+        (n) =>
+          visible(n) &&
+          (/^(fechar( modal| aviso)?|close|×|x)$/i.test(label(n)) ||
+            /close|fechar/i.test(n.getAttribute('data-testid') || '')),
+      );
+      if (close.length === 1) {
+        close[0].click();
+        return { dismissed: true };
+      }
+    }
+    return { dismissed: false };
+  }
   const idOf = (href) => {
     try {
       const url = new URL(href, location.href);
@@ -34,7 +60,7 @@ function adManagementDocument(command = {}) {
         if (contained.size !== 1) break;
         card = p;
         if (
-          [...p.querySelectorAll('button,[role=button]')].some(
+          [...p.querySelectorAll('button,[role=button],a')].some(
             (n) =>
               visible(n) &&
               /^(excluir( anúncio)?|excluir permanentemente|apagar( anúncio)?)$/i.test(label(n)),
@@ -48,7 +74,7 @@ function adManagementDocument(command = {}) {
           link.getAttribute('title'),
       );
       const price = normalize(card.innerText.match(/R\$\s*[\d.,]+/)?.[0]);
-      const controls = [...card.querySelectorAll('button,[role=button]')].filter(visible);
+      const controls = [...card.querySelectorAll('button,[role=button],a')].filter(visible);
       return { id, title, price, url: link.href, card, controls };
     })
     .filter((r) => r.title);
@@ -64,7 +90,16 @@ function adManagementDocument(command = {}) {
     return {
       ready:
         rows.length > 0 || /nenhum anúncio|você ainda não|não encontramos anúncios/i.test(text),
-      items: rows.map(({ id, title, price, url }) => ({ id, title, price, url })),
+      items: rows.map(({ id, title, price, url, controls }) => ({
+        id,
+        title,
+        price,
+        url,
+        canDelete:
+          controls.filter((n) =>
+            /^(excluir( anúncio)?|excluir permanentemente|apagar( anúncio)?)$/i.test(label(n)),
+          ).length === 1,
+      })),
       next: nextNodes.length === 1,
       // Small, public control labels help diagnose a changed OLX layout without exporting page HTML.
       controls: [...new Set(rows.flatMap((r) => r.controls.map(label)))].slice(0, 20),
@@ -86,7 +121,7 @@ function adManagementDocument(command = {}) {
   if (command.action === 'open-delete') {
     if (!row || row.title !== command.title || row.price !== command.price)
       return fail('O anúncio mudou ou não está nesta página. Atualize a lista e revise novamente.');
-    if (document.querySelector('[role=dialog],dialog[open]'))
+    if ([...document.querySelectorAll('[role=dialog],dialog[open]')].some(visible))
       return fail('Feche a janela aberta na OLX e revise novamente.');
     const buttons = row.controls.filter((n) =>
       /^(excluir( anúncio)?|excluir permanentemente|apagar( anúncio)?)$/i.test(label(n)),

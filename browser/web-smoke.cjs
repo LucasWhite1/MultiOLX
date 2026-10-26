@@ -57,6 +57,15 @@ async function runWebSmoke({
   await execute('window.multiBrowser.list()');
   if (restore) {
     const data = await execute('window.multiBrowser.listListings()');
+    const removals = await execute('window.multiBrowser.managedAds()');
+    if (
+      removals.running ||
+      removals.history.length !== 2 ||
+      !removals.history.every((r) => r.status === 'DELETED')
+    )
+      throw Error(
+        'Histórico de exclusões não sobreviveu ao reinício ou iniciou uma operação sozinho.',
+      );
     if (
       !data.profiles.some((p) => p.name === 'Conta web') ||
       !data.drafts.some((d) => d.base.title === 'Produto web de teste' && d.photos.length === 1)
@@ -293,6 +302,12 @@ async function runWebSmoke({
     return !s.running && s.items.length === 3;
   });
   await wait(() => execute("document.querySelectorAll('#managedAdRows article').length===2"));
+  if (
+    (await views
+      .get(profile.id)
+      .webContents.executeJavaScript("sessionStorage.getItem('delivery-tour-dismissed')")) !== 'yes'
+  )
+    throw Error('O aviso de entrega continuou encobrindo os anúncios.');
   await execute(
     "[...document.querySelectorAll('#managedAdRows button')].find(n=>n.textContent.startsWith('Selecionar mesmo título')).click();document.getElementById('reviewAdRemoval').click()",
   );

@@ -26,8 +26,9 @@ function createAdManagement(options) {
       throw Error('Aguarde a publicação ou o gerenciamento de anúncios em andamento.');
   }
   async function pageState(contents, previous) {
-    for (let i = 0; i < 40; i++) {
+    for (let i = 0; i < 100; i++) {
       if (cancelled) throw Error('Operação cancelada.');
+      await call(contents, { action: 'dismiss-tour' });
       const result = await call(contents, { action: 'scan' });
       const signature = result.items.map((r) => r.id).join(',');
       if (result.ready && (previous === undefined || signature !== previous)) return result;
@@ -154,7 +155,7 @@ function createAdManagement(options) {
       throw Error('Selecione de 1 a 500 anúncios.');
     const items = keys.map((key) => {
       const item = state.items.find((r) => r.key === key);
-      if (!item || state.results.some((r) => r.key === key))
+      if (!item || item.canDelete === false || state.results.some((r) => r.key === key))
         throw Error('Atualize a consulta antes de selecionar este anúncio.');
       return structuredClone(item);
     });

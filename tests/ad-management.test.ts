@@ -23,6 +23,7 @@ function fixture() {
     executeJavaScript: async (source: string) => {
       const command = JSON.parse(source.slice(source.lastIndexOf(')(') + 2, -1));
       calls.push(command);
+      if (command.action === 'dismiss-tour') return { dismissed: false };
       if (command.action === 'scan') return { ready: true, items, next: false };
       if (command.action === 'open-delete')
         return changed ? { error: 'O anúncio mudou' } : { clicked: true };

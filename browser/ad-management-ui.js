@@ -46,7 +46,9 @@
       ...[...groups.values()].map((items) => {
         const card = node('article', undefined, 'managed-ad-card');
         card.append(node('h3', items[0].title));
-        const allSameTitle = state.items.filter((r) => r.group === items[0].group);
+        const allSameTitle = state.items.filter(
+          (r) => r.group === items[0].group && r.canDelete !== false,
+        );
         const owners = new Set(allSameTitle.map((r) => r.owner));
         if (allSameTitle.length > 1) {
           const same = node(
@@ -74,7 +76,7 @@
             check = node('input');
           check.type = 'checkbox';
           check.checked = selected.has(item.key);
-          check.disabled = state.running;
+          check.disabled = state.running || item.canDelete === false;
           check.setAttribute(
             'aria-label',
             `Selecionar ${item.title} · ${item.profileName} · ID ${item.id}`,
@@ -94,7 +96,7 @@
           const remove = node('button', 'Excluir');
           remove.type = 'button';
           remove.className = 'danger';
-          remove.disabled = state.running;
+          remove.disabled = state.running || item.canDelete === false;
           remove.setAttribute(
             'aria-label',
             `Excluir ${item.title} · ${item.profileName} · ID ${item.id}`,
@@ -102,6 +104,14 @@
           remove.onclick = () => prepare([item.key]).catch(error);
           row.append(label, remove);
           card.append(row);
+          if (item.canDelete === false)
+            card.append(
+              node(
+                'p',
+                'Ação Excluir não identificada na OLX. Abra a conta para conferir.',
+                'hint',
+              ),
+            );
         }
         return card;
       }),
@@ -128,6 +138,14 @@
           .map((r) => `${r.name}: ${statuses[r.status]}${r.message ? ' — ' + r.message : ''}`)
           .join(' · ');
     $('scanManagedAds').disabled = state.running;
+    if (state.accounts.length)
+      $('status').textContent =
+        state.error ||
+        (state.running
+          ? 'Gerenciando anúncios…'
+          : state.results.length
+            ? 'Exclusão concluída. Confira os resultados por anúncio.'
+            : 'Consulta de anúncios concluída.');
     $('selectAllManagedAdAccounts').disabled = state.running;
     $('cancelAdManagement').hidden = !state.running;
     for (const input of $('managedAdAccounts').querySelectorAll('input'))

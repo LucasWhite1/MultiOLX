@@ -17,6 +17,7 @@ const { runPool } = require('./publish-pool.cjs');
 const { onboardingScript } = require('./listing-onboarding.cjs');
 const { prepareListingSteps } = require('./listing-runner.cjs');
 const { attributeDocument, fillAttributes } = require('./listing-attributes.cjs');
+const { createAdManagement } = require('./ad-management.cjs');
 function createListingService(options) {
   const {
     root,
@@ -46,6 +47,32 @@ function createListingService(options) {
   const batchActive = () => batch?.running === true;
   const directory = path.join(root, 'listing-photos');
   const file = path.join(root, 'announcements.enc');
+  const deletionFile = path.join(root, 'announcement-removals.enc');
+  let deletionHistory = [];
+  const adManager = createAdManagement({
+    profiles,
+    workers,
+    blocked: () => batchActive() || publisherBusy,
+    open: (owner, url) => openPublisher(owner, {}, { background: true, url }),
+    journal: async (result) => {
+      const entry = { ...result, updatedAt: new Date().toISOString() };
+      const next = [...deletionHistory.filter((r) => r.key !== result.key), entry].slice(-500);
+      await atomic(deletionFile, encrypted(next));
+      deletionHistory = next;
+    },
+    deleted: (item) =>
+      mutate(() => {
+        for (const draft of catalog.drafts) {
+          const delivery = draft.deliveries[item.owner];
+          if (delivery?.url === item.url)
+            catalog.delivery(draft.id, item.owner, {
+              ...delivery,
+              state: 'DELETED',
+              message: 'Anúncio excluído na OLX pelo MultiOLX.',
+            });
+        }
+      }),
+  });
   function encrypted(value) {
     if (!secureStorage()) throw new Error('O cofre do sistema está indisponível.');
     return safeStorage.encryptString(JSON.stringify(value));
@@ -73,6 +100,16 @@ function createListingService(options) {
     return result;
   }
   async function restore() {
+    try {
+      deletionHistory = JSON.parse(safeStorage.decryptString(await fs.readFile(deletionFile)));
+      if (!Array.isArray(deletionHistory) || deletionHistory.length > 500)
+        throw Error('Histórico inválido.');
+    } catch (error) {
+      if (error.code !== 'ENOENT')
+        throw Error(
+          'Não foi possível abrir o histórico de exclusões. Os arquivos foram preservados.',
+        );
+    }
     try {
       const data = JSON.parse(safeStorage.decryptString(await fs.readFile(file)));
       if (!Array.isArray(data.assets)) throw new Error('Fotos inválidas.');
@@ -106,6 +143,18 @@ function createListingService(options) {
     ipcMain.handle(name, async (event, ...args) => {
       trusted(event);
       if (
+        adManager.active() &&
+        ![
+          'listings:managed-state',
+          'listings:managed-cancel',
+          'listings:show',
+          'listings:list',
+          'listings:ai-status',
+          'listings:batch-state',
+        ].includes(name)
+      )
+        throw Error('Aguarde a consulta ou exclusão de anúncios em andamento.');
+      if (
         batchActive() &&
         [
           'listings:prepare',
@@ -133,6 +182,17 @@ function createListingService(options) {
     return summary();
   });
   handle('listings:list', summary);
+  handle('listings:managed-scan', (owners) => {
+    showWorkspace();
+    return adManager.scan(owners);
+  });
+  handle('listings:managed-state', () => ({
+    ...adManager.snapshot(),
+    history: structuredClone(deletionHistory),
+  }));
+  handle('listings:managed-review', (keys) => adManager.prepare(keys));
+  handle('listings:managed-delete', (token) => adManager.remove(token));
+  handle('listings:managed-cancel', () => adManager.cancel());
   handle('listings:ai-status', () => options.ai.status());
   handle('listings:ai-configure', (input) => options.ai.configure(input));
   handle('listings:ai-test', () => options.ai.test());
@@ -550,7 +610,8 @@ function createListingService(options) {
   });
   async function startBatch(id, revision, prepareOnly = false) {
     await queue.catch(() => {});
-    if (batchActive() || publisherBusy) throw new Error('Já existe uma publicação em andamento.');
+    if (batchActive() || publisherBusy || adManager.active())
+      throw new Error('Já existe uma operação de anúncios em andamento.');
     if (catalog.find(id).revision !== revision)
       throw new Error('Salve a versão atual antes de publicar.');
     const items = catalog.review(id, profiles());
@@ -759,13 +820,15 @@ function createListingService(options) {
     catalog,
     persist,
     batchState,
-    batchActive,
+    batchActive: () => batchActive() || adManager.active(),
     isWorker: (id) => workers.has(id),
     cancel: () => {
       if (batchActive()) batch.cancelled = true;
+      adManager.cancel();
     },
     wait: async () => {
       await batchWork;
+      await adManager.wait();
       await queue;
     },
     ownsPage: (id) =>

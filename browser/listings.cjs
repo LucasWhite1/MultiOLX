@@ -232,6 +232,7 @@ class ListingCatalog {
           continue;
         const state = [
           'PUBLISHED',
+          'DELETED',
           'SUBMITTED',
           'CHANGED',
           'READY',

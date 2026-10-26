@@ -140,6 +140,39 @@
           ><button id="newListing">Novo anúncio</button><button id="saveListing">Salvar</button>
         </div>
         <div id="listingNotice" role="status"></div>
+        <details id="adManager" class="listing-panel">
+          <summary>Gerenciar e excluir anúncios publicados</summary>
+          <p>
+            Consulte as contas, selecione anúncios individuais ou reúna os que têm o mesmo título.
+          </p>
+          <div id="managedAdAccounts" class="managed-ad-accounts"></div>
+          <div class="managed-ad-tools">
+            <button id="selectAllManagedAdAccounts" type="button">
+              Selecionar todas as contas
+            </button>
+            <button id="scanManagedAds" type="button">Consultar anúncios</button>
+            <button id="cancelAdManagement" type="button" hidden>Cancelar pendentes</button>
+          </div>
+          <p id="managedAdStatus" role="status"></p>
+          <div class="managed-ad-tools">
+            <input
+              id="managedAdSearch"
+              type="search"
+              placeholder="Buscar título ou ID"
+              aria-label="Buscar anúncios publicados"
+            />
+            <select id="managedAdOwner" aria-label="Filtrar anúncios por conta">
+              <option value="">Todas as contas consultadas</option>
+            </select>
+            <button id="clearManagedAdSelection" type="button">Limpar seleção</button>
+            <button id="reviewAdRemoval" type="button" disabled>Revisar exclusão</button>
+          </div>
+          <div id="managedAdRows"></div>
+          <details id="managedAdResults" hidden>
+            <summary id="managedAdResultTitle">Resultado das exclusões</summary>
+            <div id="managedAdResultRows"></div>
+          </details>
+        </details>
         <details id="listingBatch" class="listing-panel" hidden>
           <summary id="listingBatchTitle" role="status" aria-live="polite"></summary>
           <div id="listingBatchJobs"></div>
@@ -287,6 +320,18 @@
         </div>
       </form>
     </dialog>
+    <dialog id="adRemovalDialog" aria-labelledby="adRemovalTitle">
+      <h2 id="adRemovalTitle">Excluir anúncios da OLX?</h2>
+      <p>
+        Confira os títulos, IDs e contas abaixo. A exclusão é definitiva e não apaga seus rascunhos.
+      </p>
+      <div id="adRemovalReview"></div>
+      <p id="adRemovalError" class="error" role="alert"></p>
+      <div class="managed-ad-tools">
+        <button id="cancelAdRemoval" type="button">Voltar</button>
+        <button id="confirmAdRemoval" class="danger" type="button">Confirmar exclusão</button>
+      </div>
+    </dialog>
     <dialog id="removeProfileDialog" aria-labelledby="removeProfileTitle">
       <h2 id="removeProfileTitle">Remover perfil?</h2>
       <p>
@@ -303,5 +348,6 @@
     <footer id="status" role="status">Pronto. Nenhum site foi aberto.</footer>
     <script src="ui.js"></script>
     <script src="listing-ui.js"></script>
+    <script src="ad-management-ui.js"></script>
   </body>
 </html>

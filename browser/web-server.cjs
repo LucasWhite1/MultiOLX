@@ -20,6 +20,11 @@ const channels = new Set([
   'inbox:open',
   'listings:show',
   'listings:list',
+  'listings:managed-scan',
+  'listings:managed-state',
+  'listings:managed-review',
+  'listings:managed-delete',
+  'listings:managed-cancel',
   'listings:ai-status',
   'listings:ai-configure',
   'listings:ai-test',
@@ -35,6 +40,7 @@ const channels = new Set([
   'listings:batch-cancel',
 ]);
 const reads = new Set([
+  'listings:managed-state',
   'profiles:list',
   'inbox:state',
   'listings:list',
@@ -138,6 +144,7 @@ async function createWebServer(options) {
     ['/style.css', ['style.css', 'text/css']],
     ['/ui.js', ['ui.js', 'text/javascript']],
     ['/listing-ui.js', ['listing-ui.js', 'text/javascript']],
+    ['/ad-management-ui.js', ['ad-management-ui.js', 'text/javascript']],
     ['/web-bridge.js', ['web-bridge.js', 'text/javascript']],
     ['/web.css', ['web.css', 'text/css']],
     ['/login.js', ['login.js', 'text/javascript']],
@@ -304,7 +311,11 @@ async function createWebServer(options) {
         // All application scripts must run after the bridge, in document order.
         html = html
           .replace('<script src="ui.js">', '<script src="ui.js" defer>')
-          .replace('<script src="listing-ui.js">', '<script src="listing-ui.js" defer>');
+          .replace('<script src="listing-ui.js">', '<script src="listing-ui.js" defer>')
+          .replace(
+            '<script src="ad-management-ui.js">',
+            '<script src="ad-management-ui.js" defer>',
+          );
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
         return res.end(html);
       }

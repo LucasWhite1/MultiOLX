@@ -78,7 +78,9 @@ async function runWebSmoke({
       new Response(
         new URL(request.url).hostname === 'chat.olx.com.br'
           ? chatFixture
-          : '<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><title>OLX de teste</title><input id="message" style="position:absolute;left:20px;top:30px;width:240px;height:45px"><button style="position:absolute;left:20px;top:100px" onclick="document.body.dataset.clicked=\'yes\'">Confirmar</button>',
+          : new URL(request.url).pathname === '/anuncios/publicados'
+            ? require('../scripts/ad-management-fixture.cjs').adManagementFixture()
+            : '<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><title>OLX de teste</title><input id="message" style="position:absolute;left:20px;top:30px;width:240px;height:45px"><button style="position:absolute;left:20px;top:100px" onclick="document.body.dataset.clicked=\'yes\'">Confirmar</button>',
         { headers: { 'Content-Type': 'text/html;charset=utf-8' } },
       ),
   );
@@ -280,6 +282,67 @@ async function runWebSmoke({
   }
   if (errors.some((e) => /Uncaught|Content Security Policy|Refused to/.test(e)))
     throw Error('Erro na interface web: ' + errors.join('\n'));
+  panel.setContentSize(412, 915);
+  await execute("document.getElementById('adManager').open=true");
+  await wait(() => execute("document.querySelectorAll('#managedAdAccounts input').length===1"));
+  await execute(
+    "document.querySelector('#managedAdAccounts input').checked=true;document.getElementById('scanManagedAds').click()",
+  );
+  await wait(async () => {
+    const s = await execute('window.multiBrowser.managedAds()');
+    return !s.running && s.items.length === 3;
+  });
+  await wait(() => execute("document.querySelectorAll('#managedAdRows article').length===2"));
+  await execute(
+    "[...document.querySelectorAll('#managedAdRows button')].find(n=>n.textContent.startsWith('Selecionar mesmo título')).click();document.getElementById('reviewAdRemoval').click()",
+  );
+  await wait(() => execute("document.getElementById('adRemovalDialog').open"));
+  if (
+    (await execute("document.querySelectorAll('#adRemovalReview .managed-ad-card').length")) !== 2
+  )
+    throw Error('Revisão de exclusão não contém os dois anúncios com o mesmo título.');
+  const removalLayout = await execute(
+    "({width:innerWidth,scroll:document.documentElement.scrollWidth,dialog:document.getElementById('adRemovalDialog').getBoundingClientRect().width})",
+  );
+  if (removalLayout.scroll > 414 || removalLayout.dialog > 412)
+    throw Error('Revisão de exclusão fora da tela mobile.');
+  await fs.writeFile(
+    path.join(artifactDirectory, 'ad-removal-mobile-review.png'),
+    (await panel.webContents.capturePage()).toPNG(),
+  );
+  await execute("document.getElementById('cancelAdRemoval').click()");
+  if (
+    (await views
+      .get(profile.id)
+      .webContents.executeJavaScript(
+        "JSON.parse(sessionStorage.getItem('removed-ads')||'[]').length",
+      )) !== 0
+  )
+    throw Error('Cancelar a revisão excluiu anúncios.');
+  await execute("document.getElementById('reviewAdRemoval').click()");
+  await wait(() => execute("document.getElementById('adRemovalDialog').open"));
+  await execute("document.getElementById('confirmAdRemoval').click()");
+  await wait(async () => {
+    const s = await execute('window.multiBrowser.managedAds()');
+    return !s.running && s.results.length === 2;
+  });
+  const removals = await execute('window.multiBrowser.managedAds()');
+  if (
+    !removals.results.every((r) => r.status === 'DELETED') ||
+    removals.items.length !== 1 ||
+    removals.items[0].id !== '123456783'
+  )
+    throw Error(
+      'Exclusão pela interface falhou ou afetou anúncio não selecionado: ' +
+        JSON.stringify(removals),
+    );
+  await fs.writeFile(
+    path.join(artifactDirectory, 'ad-removal-mobile-result.png'),
+    (await panel.webContents.capturePage()).toPNG(),
+  );
+  console.log(
+    'MULTIOLX_AD_REMOVAL_OK: paginação, seleção por título, revisão mobile, cancelar sem excluir, motivo neutro e exclusão apenas de anúncios selecionados em fixture isolada.',
+  );
   const raw = await fs.readFile(path.join(root, 'announcements.enc'));
   if (raw.includes(Buffer.from('Produto web de teste')))
     throw Error('Rascunho web não está cifrado.');

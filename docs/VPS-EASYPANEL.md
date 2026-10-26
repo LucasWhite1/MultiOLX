@@ -93,6 +93,14 @@ Em um teste estritamente local, é possível usar `MULTIOLX_PUBLIC_URL=http://12
 
 ## Testes
 
+### Exclusão de anúncios
+
+Em **Anúncios → Gerenciar e excluir anúncios publicados**, selecione as contas OLX e consulte os anúncios. É possível selecionar itens individuais ou reunir todos os anúncios consultados com o mesmo título. A comparação ignora caixa e espaços repetidos; não afirma que fotos, preço ou descrição sejam iguais. A revisão mostra cada conta, título, preço e ID antes da confirmação definitiva.
+
+A consulta percorre até 50 páginas por conta. Contas com falha são identificadas e não entram na seleção. As exclusões são executadas em sequência, revalidando o ID, título e preço na conta correta. A automação utiliza os controles visíveis da OLX e, quando solicitado, um motivo neutro disponível, como “Não quero mais anunciar”. Layouts ou motivos desconhecidos interrompem o item para conferência. Resultados incertos não são repetidos automaticamente. “Cancelar pendentes” não desfaz uma exclusão já confirmada.
+
+O histórico fica criptografado em `announcement-removals.enc` no mesmo volume persistente. Rascunhos e fotos locais são preservados. Os resultados ficam recolhidos por padrão. O teste web inclui seleção por título, paginação, revisão em 412 px, cancelamento e exclusão em uma página simulada, sem apagar anúncios reais.
+
 `npm test` verifica autenticação, isolamento dos comandos, CSRF, expiração/logout, controle entre dispositivos, limite de tentativas e cofre autenticado, além das funções do desktop. `npm run test:browser` mantém as regressões do Electron. `npm run test:web` inicia o servidor real em perfil temporário, faz login pela interface, envia foto e rascunho, verifica layouts de 390 e 1380 pixels e testa imagem, teclado e cliques no navegador remoto. Um segundo processo confere a restauração. O teste inclui também popup de login, sua interação e fechamento. `npm run test:docker` repete esse percurso dentro da imagem Linux, verifica o volume em um segundo container e confere o encerramento com SIGTERM sem matar o display antes de salvar. Esses testes não acessam contas reais da OLX.
 
 Fontes: [Compose service do Easypanel](https://easypanel.io/docs/services/compose), [captura e entrada no Electron](https://www.electronjs.org/docs/latest/api/web-contents), [sandbox do Electron](https://www.electronjs.org/docs/latest/tutorial/sandbox).

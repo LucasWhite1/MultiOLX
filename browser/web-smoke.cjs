@@ -170,6 +170,16 @@ async function runWebSmoke({
     [412, 460, 'keyboard'],
     [915, 412, 'landscape'],
   ]) {
+    if (label === 'compact') {
+      await execute(`(async()=>{
+        const session=await(await fetch('/api/session')).json();
+        await fetch('/api/control/release',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':session.csrf},body:'{}'});
+        const login=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:'admin',password:${JSON.stringify(process.env.MULTIOLX_TEST_PASSWORD)}})});
+        if(!login.ok)throw Error('Não foi possível simular troca de sessão.');
+      })()`);
+      if (!(await execute('window.multiBrowser.list()')).some((p) => p.id === profile.id))
+        throw Error('A aba não recuperou a autorização após troca de sessão.');
+    }
     panel.setContentSize(width, height);
     await new Promise((r) => setTimeout(r, 250));
     await wait(async () => {

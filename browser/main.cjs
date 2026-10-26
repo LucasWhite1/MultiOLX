@@ -964,7 +964,9 @@ function resize() {
     const focusChat = mode === 'unified' && width < 1500;
     const x = mode === 'unified' && !focusChat ? 584 : 232;
     const isChat = [...chatViews.values()].some((entry) => entry.view === displayedView);
-    displayedView.webContents.setZoomFactor(isChat ? Math.min(1, (width - x) / 1100) : 1);
+    displayedView.webContents.setZoomFactor(
+      isChat ? Math.max(0.1, Math.min(1, (width - x) / 1100)) : 1,
+    );
     displayedView.setBounds({
       x,
       y: 120,

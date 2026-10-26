@@ -23,6 +23,8 @@
     remoteTarget = 0,
     objectUrl,
     stream,
+    remoteGeneration = 0,
+    remoteProfile = null,
     busy = false,
     inputQueue = Promise.resolve();
   const notify = (channel, state) => {
@@ -37,7 +39,7 @@
     csrf = session.csrf;
     return session;
   });
-  async function request(url, body) {
+  async function request(url, body, refreshed = false) {
     await ready;
     const response = await fetch(url, {
       method: 'POST',
@@ -46,6 +48,19 @@
     });
     const data = await response.json();
     if (response.status === 401) location.replace('/login');
+    // A different tab can replace the shared login cookie. The server rejects
+    // stale CSRF before executing anything, so only this specific rejection is retried.
+    if (
+      response.status === 403 &&
+      data.error === 'Sessão inválida. Atualize a página.' &&
+      !refreshed
+    ) {
+      const current = await fetch('/api/session', { cache: 'no-store' });
+      if (current.ok) {
+        csrf = (await current.json()).csrf;
+        return request(url, body, true);
+      }
+    }
     if (!response.ok) throw Error(data.error);
     return Object.prototype.hasOwnProperty.call(data, 'result') ? data.result : data;
   }
@@ -252,6 +267,10 @@
   reply.onsubmit = async (event) => {
     event.preventDefault();
     if (sending || !conversationKey || !message.value.trim()) return;
+    if (!remoteTarget) {
+      replyNotice.textContent = 'Aguarde a conversa carregar antes de enviar.';
+      return;
+    }
     const key = conversationKey,
       value = message.value;
     let draft = drafts.get(key);
@@ -278,7 +297,7 @@
       if (conversationKey === key) replyNotice.textContent = error.message;
     } finally {
       sending = false;
-      sendMessage.disabled = false;
+      sendMessage.disabled = !remoteTarget;
       sendMessage.textContent = 'Enviar';
     }
   };
@@ -383,6 +402,8 @@
   function showRemote(state) {
     if (state.mode) mode = state.mode;
     if (state.hasView !== undefined) hasView = state.hasView;
+    const profileChanged = state.profileId !== undefined && remoteProfile !== state.profileId;
+    if (state.profileId !== undefined) remoteProfile = state.profileId;
     let nextKey = conversationKey;
     if (state.conversationKey !== undefined) nextKey = state.conversationKey || null;
     if (
@@ -392,6 +413,13 @@
       state.hasView === false
     )
       nextKey = null;
+    if (profileChanged || nextKey !== conversationKey) {
+      remoteGeneration++;
+      remoteTarget = 0;
+      lastViewport = '';
+      image.removeAttribute('src');
+      sendMessage.disabled = true;
+    }
     if (nextKey !== conversationKey) {
       if (conversationKey && message.value) {
         const before = drafts.get(conversationKey);
@@ -419,6 +447,7 @@
   async function pollFrame() {
     if (busy || document.hidden || panel.hidden) return;
     busy = true;
+    const generation = remoteGeneration;
     try {
       await ready;
       const response = await fetch('/api/frame');
@@ -427,9 +456,13 @@
         return;
       }
       if (!response.ok || response.status === 204) return;
+      if (generation !== remoteGeneration) return;
       remoteTarget = Number(response.headers.get('X-Remote-Target'));
+      const firstFrame = sendMessage.disabled && !sending;
+      sendMessage.disabled = sending;
       closePopup.hidden = response.headers.get('X-Remote-Popup') !== '1';
       const blob = await response.blob();
+      if (generation !== remoteGeneration) return;
       const next = URL.createObjectURL(blob);
       image.onload = () => {
         if (objectUrl) URL.revokeObjectURL(objectUrl);
@@ -443,6 +476,8 @@
         lastViewport = viewport;
         await input({ action: 'viewport', width, height });
       }
+      if (firstFrame && conversationKey && document.activeElement === message)
+        await message.onfocus();
     } catch (error) {
       document.getElementById('status').textContent = 'Conexão interrompida. Tentando reconectar…';
     } finally {
@@ -466,6 +501,7 @@
           return r.json();
         })
         .then((s) => {
+          csrf = s.csrf;
           notify('browser:state', s.state);
           notify('listings:batch', s.batch);
         })

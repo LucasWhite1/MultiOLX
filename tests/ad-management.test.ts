@@ -43,6 +43,9 @@ function fixture() {
     ],
     workers,
     blocked: () => false,
+    focus: async (owner: string) => {
+      calls.push({ action: 'focus-existing', owner });
+    },
     open: async () => contents,
     pause: async () => {},
     journal: async (r: any) => {
@@ -137,4 +140,13 @@ it('não confirma exclusão se não conseguir gravar o registro no cofre', async
   await f.manager.wait();
   expect(f.calls.some((c) => c.action === 'confirm-delete')).toBe(false);
   expect(f.manager.snapshot().error).toContain('Cofre');
+});
+it('abre a página existente da conta para conferir sem clicar nem reenviar a exclusão', async () => {
+  const f = fixture();
+  await expect(f.manager.open('a')).rejects.toThrow('fechada');
+  f.manager.scan(['a']);
+  await f.manager.wait();
+  f.calls.length = 0;
+  await f.manager.open('a');
+  expect(f.calls).toEqual([{ action: 'focus-existing', owner: 'a' }]);
 });

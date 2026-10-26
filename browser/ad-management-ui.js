@@ -110,6 +110,42 @@
             open.title = 'Destino da exclusão na OLX: ' + item.deleteDestination;
           open.onclick = () => api.openManagedAd(item.owner).catch(error);
           row.append(open);
+          const metrics = item.metrics || {},
+            stats = node('div', undefined, 'managed-ad-metrics');
+          function stat(text, explanation) {
+            const chip = node('span', text);
+            if (explanation) chip.title = explanation;
+            stats.append(chip);
+          }
+          stat(
+            metrics.daysPublished == null
+              ? 'Tempo: não informado'
+              : metrics.daysPublished === 0
+                ? 'Hoje'
+                : `${metrics.daysPublished} dia${metrics.daysPublished === 1 ? '' : 's'}`,
+            metrics.publishedDate
+              ? `Data exibida pela OLX: ${metrics.publishedDate.split('-').reverse().join('/')}. Dias de calendário em São Paulo.`
+              : 'A data de publicação não apareceu neste card da OLX.',
+          );
+          stat(
+            metrics.views == null
+              ? 'Visualizações: não informado'
+              : `${metrics.views.toLocaleString('pt-BR')} visualizaç${metrics.views === 1 ? 'ão' : 'ões'}`,
+            'Contagem de visitas/visualizações exibida pela OLX na consulta.',
+          );
+          stat(
+            metrics.messages == null
+              ? 'Mensagens: não informado'
+              : `${metrics.messages.toLocaleString('pt-BR')} mensage${metrics.messages === 1 ? 'm' : 'ns'}${metrics.messagesScope === 'received' ? ' recebidas' : ' na OLX'}`,
+            'Somente a contagem exibida pela OLX. Não é calculada a partir do número de conversas.',
+          );
+          if (metrics.conversations != null) stat(`${metrics.conversations} conversas na OLX`);
+          else if (item.cachedConversations)
+            stat(
+              `${item.cachedConversations.count} conversas identificadas`,
+              `Conversas já identificadas no chat unificado desta conta, pelo título único do anúncio. Pode ser uma lista parcial. Última leitura: ${new Date(item.cachedConversations.observedAt).toLocaleString('pt-BR')}. Não é o total de mensagens.`,
+            );
+          row.append(stats);
           card.append(row);
           if (item.canDelete === false)
             card.append(

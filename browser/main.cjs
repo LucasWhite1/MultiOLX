@@ -1104,6 +1104,7 @@ async function start() {
   const listingAI = createDeepSeek({ root, atomic, safeStorage, secureStorage });
   if (!selfTest) await listingAI.restore();
   listingService = createListingService({
+    inboxSummary: inboxState,
     ai: listingAI,
     parallelLimit: () => maxPages,
     batchChanged: (state) => {

@@ -253,6 +253,20 @@ dialog::backdrop {
 .managed-ad-card h3 {
   margin: 0 0 8px;
 }
+.managed-ad-metrics {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.managed-ad-metrics span {
+  padding: 5px 9px;
+  border-radius: 8px;
+  background: #f3f0ff;
+  color: #514174;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
 #managedAdRows,
 #managedAdResultRows {
   max-height: 55vh;

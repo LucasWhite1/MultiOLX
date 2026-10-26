@@ -139,11 +139,13 @@ function adManagementDocument(command = {}) {
     return {
       ready:
         rows.length > 0 || /nenhum anúncio|você ainda não|não encontramos anúncios/i.test(text),
-      items: rows.map(({ id, title, price, url, controls }) => ({
+      items: rows.map(({ id, title, price, url, controls, card }) => ({
         id,
         title,
         price,
         url,
+        statisticsText: normalize(card.innerText).slice(0, 3000),
+        publishedDatetime: card.querySelector('time[datetime]')?.getAttribute('datetime') || '',
         deleteDestination:
           controls.find((n) => /^(excluir( anúncio)?|apagar( anúncio)?)$/i.test(label(n)))?.href ||
           '',

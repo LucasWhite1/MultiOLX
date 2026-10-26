@@ -52,6 +52,7 @@ function createListingService(options) {
   const adManager = createAdManagement({
     profiles,
     workers,
+    inbox: options.inboxSummary,
     blocked: () => batchActive() || publisherBusy,
     open: (owner, url) => openPublisher(owner, {}, { background: true, url }),
     focus: (owner, contents) => options.focusPublisher(owner, contents, contents.getURL()),

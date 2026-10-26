@@ -305,6 +305,25 @@ async function runWebSmoke({
     return !s.running && s.items.length === 3;
   });
   await wait(() => execute("document.querySelectorAll('#managedAdRows article').length===2"));
+  const metrics = (await execute('window.multiBrowser.managedAds()')).items;
+  if (
+    metrics.find((r) => r.id === '123456781').metrics.views !== 3 ||
+    metrics.find((r) => r.id === '123456781').metrics.messages !== 7 ||
+    metrics.find((r) => r.id === '123456782').metrics.messages !== null ||
+    metrics.find((r) => r.id === '123456782').metrics.views !== 0
+  )
+    throw Error('Métricas da OLX ausentes ou números não informados foram inventados.');
+  const metricsText = await execute("document.querySelector('#managedAdRows').innerText");
+  if (
+    !metricsText.includes('3 visualizações') ||
+    !metricsText.includes('7 mensagens recebidas') ||
+    !metricsText.includes('Mensagens: não informado')
+  )
+    throw Error('Métricas não apareceram nos cards.');
+  await fs.writeFile(
+    path.join(artifactDirectory, 'ad-metrics-mobile.png'),
+    (await panel.webContents.capturePage()).toPNG(),
+  );
   if (
     (await views
       .get(profile.id)

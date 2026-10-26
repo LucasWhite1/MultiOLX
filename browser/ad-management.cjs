@@ -1,5 +1,6 @@
 const { randomUUID } = require('node:crypto');
 const { adManagementDocument } = require('./ad-management-dom.cjs');
+const { adMetrics, cachedConversations } = require('./ad-metrics.cjs');
 const listUrl = 'https://conta.olx.com.br/anuncios/publicados';
 const groupTitle = (s) =>
   s.normalize('NFKC').trim().replace(/\s+/g, ' ').toLocaleLowerCase('pt-BR');
@@ -136,6 +137,13 @@ function createAdManagement(options) {
                   });
               }
             });
+            const chat = options.inbox?.();
+            for (const item of items) {
+              item.metrics = adMetrics(item.statisticsText, Date.now(), item.publishedDatetime);
+              item.cachedConversations = cachedConversations(item, items, chat);
+              delete item.statisticsText;
+              delete item.publishedDatetime;
+            }
             state.items.push(...items);
           });
           account.status = 'READY';

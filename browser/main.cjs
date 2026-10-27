@@ -752,6 +752,8 @@ async function ensureChat(id, retry = false) {
     if (
       retry &&
       profiles.find((p) => p.id === id)?.provider === 'facebook' &&
+      !hasOpenConversation(entry.view) &&
+      foregroundId !== id &&
       !entry.view.webContents.getURL().startsWith('https://www.facebook.com/marketplace/inbox') &&
       !entry.view.webContents.getURL().startsWith('https://www.facebook.com/messages/marketplace')
     ) {
@@ -818,6 +820,8 @@ async function scanProfiles() {
       if (id === walkthroughOwner) continue;
       if (listingService?.ownsPage(id)) continue;
       const existing = views.get(id);
+      if (foregroundId === id || (existing === displayedView && hasOpenConversation(existing)))
+        continue;
       if (existing === displayedView && !chatViews.has(id)) continue;
       try {
         const view = await ensureChat(id, retry),
@@ -2499,6 +2503,7 @@ async function start() {
     inbox.update(fbFixture.id, { status: 'LAYOUT_CHANGED' });
     chatViews.get(fbFixture.id).stopped = true;
     await openConversation(fbRows.find((c) => c.externalId === '123').key);
+    await ensureChat(fbFixture.id, true);
     await new Promise((resolve) => setTimeout(resolve, 100));
     if (
       displayedView !== fbView ||

@@ -5,7 +5,7 @@ function facebookMarketplaceFixture(url = 'https://www.facebook.com/marketplace/
       let sequence=0;
       function fixtureThreadMessage(text,author='Você') {
         const now=new Date(), months=['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
-        const stamp=now.getDate()+' de '+months[now.getMonth()]+' de '+now.getFullYear()+' '+String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
+        const stamp=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
         const row=document.createElement('div');row.setAttribute('data-message-id','fixture-'+(++sequence));row.setAttribute('aria-label','Às '+stamp+', '+author+': '+text);row.textContent=text;document.getElementById('threadMessages').append(row);
       }
       document.querySelector('[contenteditable]').onkeydown=function(event){if(event.key==='Enter')event.preventDefault();};

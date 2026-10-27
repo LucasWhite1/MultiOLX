@@ -892,11 +892,15 @@ async function openConversation(key) {
   if (typeof key !== 'string' || key.length > 1200) throw new Error('Conversa inválida.');
   const conversation = inbox.find(key, profiles);
   if (!conversation) throw new Error('Conversa não encontrada. Atualize a lista.');
+  const facebook = profiles.find((p) => p.id === conversation.profileId)?.provider === 'facebook';
   // A SPA conversation is opened through its native row. Reloading the full
   // ?chat-id URL discards the running chat client and can leave a skeleton.
   foregroundId = conversation.profileId;
   try {
-    const view = await waitForList(conversation.profileId);
+    const view =
+      facebook && /^\d+$/.test(conversation.externalId)
+        ? await ensureChat(conversation.profileId)
+        : await waitForList(conversation.profileId);
     mode = 'unified';
     active = conversation.profileId;
     send({ source: conversation.profileName });
@@ -906,9 +910,10 @@ async function openConversation(key) {
       view.webContents.navigationHistory.getActiveIndex();
     chatViews.get(conversation.profileId).openDeadline = Date.now() + 15000;
     chatViews.get(conversation.profileId).conversationOpen = true;
-    const facebook = profiles.find((p) => p.id === conversation.profileId)?.provider === 'facebook';
     let result;
     if (facebook && /^\d+$/.test(conversation.externalId)) {
+      chatViews.get(conversation.profileId).stopped = false;
+      chatViews.get(conversation.profileId).initializing = false;
       const target = `https://www.facebook.com/messages/t/${conversation.externalId}/`;
       send({
         mode,
@@ -2490,6 +2495,9 @@ async function start() {
     })()`))
     )
       throw Error('Filtro por plataforma misturou conversas OLX e Facebook.');
+    // A verified cached thread must open even if the folder is temporarily unavailable.
+    inbox.update(fbFixture.id, { status: 'LAYOUT_CHANGED' });
+    chatViews.get(fbFixture.id).stopped = true;
     await openConversation(fbRows.find((c) => c.externalId === '123').key);
     await new Promise((resolve) => setTimeout(resolve, 100));
     if (

@@ -342,6 +342,14 @@ async function marketplaceDocument(command = {}) {
         visibility: document.visibilityState,
         focused: document.hasFocus(),
         dialog: !!dialog,
+        dialogLabels: [...document.querySelectorAll('[role=dialog]')]
+          .filter(visible)
+          .map((n) => ({
+            label: n.getAttribute('aria-label'),
+            marketplaceControls: [...n.querySelectorAll('[role=button],[role=link],a')]
+              .filter((e) => visible(e) && e.innerText.trim().split('\n')[0] === 'Marketplace')
+              .map((e) => ({ role: e.getAttribute('role'), tag: e.tagName })),
+          })),
         candidates: candidates.length,
         messenger: [...document.querySelectorAll('[role=button][aria-label=Messenger]')].filter(
           visible,

@@ -858,6 +858,11 @@ async function scanProfiles() {
           await new Promise((resolve) => setTimeout(resolve, 250));
         }
         if (inbox.accounts.get(id)?.status === 'LOADING' && chatViews.get(id)?.view === view) {
+          if (profiles.find((p) => p.id === id)?.provider === 'facebook')
+            console.log(
+              'MULTIOLX_FACEBOOK_SYNC_TIMEOUT ' +
+                JSON.stringify(chatViews.get(id).facebookDiagnostic),
+            );
           inbox.update(id, { status: 'TIMEOUT' });
           chatViews.get(id).stopped = true;
           publishInbox();

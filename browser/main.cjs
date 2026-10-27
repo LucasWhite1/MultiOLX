@@ -2566,14 +2566,26 @@ async function start() {
     })()`))
     )
       throw Error('O compositor aceitou responder em uma conversa diferente.');
-    win.focus();
-    fbView.webContents.focus();
-    await fbView.webContents.executeJavaScript(
-      "document.querySelector('[contenteditable]').focus()",
-    );
-    await fbView.webContents.insertText('Resposta simulada no Marketplace');
-    fbView.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Enter' });
-    fbView.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Enter' });
+    const facebookRemoteFixture = require('./remote-browser.cjs').createRemoteBrowser({
+      window: () => win,
+      view: () => displayedView,
+      popups,
+      owner: () => active,
+      busy: () => false,
+      conversation: () => remoteConversation,
+      afterSend: () => readInbox(fbFixture.id),
+    });
+    fbView.webContents.setZoomFactor(1);
+    await facebookRemoteFixture.frame();
+    const facebookSent = await facebookRemoteFixture.input({
+      target: fbView.webContents.id,
+      action: 'chat-send',
+      conversationKey: fbRows.find((c) => c.externalId === '123').key,
+      text: 'Resposta simulada no Marketplace',
+      requestId: randomUUID(),
+    });
+    if (!facebookSent.confirmed)
+      throw Error('O clique no botão nativo do Marketplace não confirmou o envio.');
     for (let i = 0; i < 30; i++) {
       await readInbox(fbFixture.id);
       if (

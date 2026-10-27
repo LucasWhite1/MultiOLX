@@ -130,11 +130,47 @@ function createRemoteBrowser({
           if (target()?.contents !== t.contents || conversation()?.key !== context.key)
             throw Error('A conversa mudou durante o envio. O texto não foi enviado.');
           // Register before dispatch: a lost HTTP response must never repeat Enter.
-          const result = { submitted: true, confirmed: false };
+          const result = { submitted: false, confirmed: false };
           submissions.set(key, { text: command.text, conversationKey: context.key, result });
           if (submissions.size > 100) submissions.delete(submissions.keys().next().value);
-          t.contents.sendInputEvent({ type: 'keyDown', keyCode: 'Enter' });
-          t.contents.sendInputEvent({ type: 'keyUp', keyCode: 'Enter' });
+          if (context.platform === 'facebook-marketplace') {
+            let submit;
+            for (let attempt = 0; attempt < 10; attempt++) {
+              try {
+                submit = await composer(t.contents, {
+                  ...context,
+                  phase: 'submit',
+                  text: command.text,
+                });
+                break;
+              } catch (error) {
+                if (attempt === 9) throw error;
+                await new Promise((resolve) => setTimeout(resolve, 100));
+              }
+            }
+            if (target()?.contents !== t.contents || conversation()?.key !== context.key)
+              throw Error('A conversa mudou antes de confirmar o envio.');
+            const zoom = t.contents.getZoomFactor();
+            const x = Math.round(submit.point.x * zoom),
+              y = Math.round(submit.point.y * zoom);
+            if (
+              !Number.isFinite(x) ||
+              !Number.isFinite(y) ||
+              x < 0 ||
+              y < 0 ||
+              x >= viewport.width ||
+              y >= viewport.height
+            )
+              throw Error('O botão de envio está fora da área visível.');
+            result.submitted = true;
+            t.contents.sendInputEvent({ type: 'mouseMove', x, y });
+            t.contents.sendInputEvent({ type: 'mouseDown', x, y, button: 'left', clickCount: 1 });
+            t.contents.sendInputEvent({ type: 'mouseUp', x, y, button: 'left', clickCount: 1 });
+          } else {
+            result.submitted = true;
+            t.contents.sendInputEvent({ type: 'keyDown', keyCode: 'Enter' });
+            t.contents.sendInputEvent({ type: 'keyUp', keyCode: 'Enter' });
+          }
           for (let i = 0; i < 20; i++) {
             await new Promise((r) => setTimeout(r, 100));
             const state = await composer(t.contents, { ...context, phase: 'check' }).catch(

@@ -261,6 +261,8 @@
     const key = conversationKey;
     try {
       const result = await input({ action: 'chat-check', conversationKey: key }, true);
+      if (result.diagnostic?.messageLabels)
+        console.debug('MULTIOLX_FACEBOOK_COMPOSER', JSON.stringify(result.diagnostic));
       if (conversationKey === key)
         replyNotice.textContent = result.empty
           ? 'Campo da conversa pronto para responder.'

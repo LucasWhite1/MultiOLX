@@ -77,7 +77,57 @@ function chatComposerDocument(context) {
   }
   const field = candidates[0],
     value = field.value ?? field.innerText;
-  if (context.phase === 'check') return { empty: !value.trim() };
+  const nativeButtons =
+    context.platform === 'facebook-marketplace'
+      ? [...scope.querySelectorAll('button[aria-label],[role=button][aria-label]')].filter(
+          (n) =>
+            visible(n) &&
+            /^(Enviar|Send|Pressione Enter para|Press Enter to)/i.test(
+              n.getAttribute('aria-label') || '',
+            ),
+        )
+      : [];
+  if (context.phase === 'check')
+    return {
+      empty: !value.trim(),
+      ...(context.platform === 'facebook-marketplace'
+        ? {
+            diagnostic: {
+              focused: document.activeElement === field,
+              documentFocused: document.hasFocus(),
+              buttons: nativeButtons.map((n) => n.getAttribute('aria-label')),
+              messageLabels: [...scope.querySelectorAll('[aria-label]')]
+                .filter((n) =>
+                  /^(Às |At |Pressione Enter, Mensagem enviada|Press Enter, Message sent)/.test(
+                    n.getAttribute('aria-label') || '',
+                  ),
+                )
+                .slice(-4)
+                .map((n) =>
+                  n
+                    .getAttribute('aria-label')
+                    .replace(/: ([\s\S]+)$/, ': [texto]')
+                    .slice(0, 220),
+                ),
+              messageIdElements: scope.querySelectorAll('[data-message-id]').length,
+            },
+          }
+        : {}),
+    };
+  if (context.phase === 'submit' && context.platform === 'facebook-marketplace') {
+    if (typeof context.text !== 'string' || value.trim() !== context.text.trim())
+      throw Error('O texto no Facebook mudou. Confira a conversa antes de enviar.');
+    const send = nativeButtons.filter((n) =>
+      /^(Enviar(?: mensagem)?|Send(?: message)?|Pressione Enter para enviar|Press Enter to send)$/i.test(
+        n.getAttribute('aria-label').trim(),
+      ),
+    );
+    if (send.length !== 1)
+      throw Error('O botão de envio do Facebook ainda não está disponível. Confira a conversa.');
+    send[0].scrollIntoView({ block: 'nearest' });
+    const rect = send[0].getBoundingClientRect();
+    return { point: { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 } };
+  }
   if (value.trim()) throw Error('Já existe texto no campo da conversa. Confira antes de enviar.');
   field.focus();
   field.scrollIntoView({ block: 'nearest' });

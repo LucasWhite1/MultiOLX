@@ -1,14 +1,14 @@
 function facebookMarketplaceFixture(url = 'https://www.facebook.com/marketplace/inbox/') {
   const id = /^\/messages\/t\/(\d+)\/?$/.exec(new URL(url).pathname)?.[1];
   if (id)
-    return `<main role="main"><h1>${id === '123' ? 'Cliente · Produto real' : 'Outro · Outro produto'}</h1><span>Marketplace</span><div aria-label="Mensagens" id="threadMessages">Histórico da conversa ${id}</div><div contenteditable="true" role="textbox" aria-label="Mensagem"></div></main><script>
+    return `<main role="main"><h1>${id === '123' ? 'Cliente · Produto real' : 'Outro · Outro produto'}</h1><span>Marketplace</span><div aria-label="Mensagens" id="threadMessages">Histórico da conversa ${id}</div><div contenteditable="true" role="textbox" aria-label="Mensagem"></div><button aria-label="Pressione Enter para enviar" onclick="const field=document.querySelector('[contenteditable]');if(field.innerText.trim()){fixtureThreadMessage(field.innerText);field.innerText='';}">Enviar</button></main><script>
       let sequence=0;
       function fixtureThreadMessage(text,author='Você') {
         const now=new Date(), months=['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
         const stamp=now.getDate()+' de '+months[now.getMonth()]+' de '+now.getFullYear()+' '+String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
         const row=document.createElement('div');row.setAttribute('data-message-id','fixture-'+(++sequence));row.setAttribute('aria-label','Às '+stamp+', '+author+': '+text);row.textContent=text;document.getElementById('threadMessages').append(row);
       }
-      document.querySelector('[contenteditable]').onkeydown=function(event){if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();if(this.innerText.trim()){fixtureThreadMessage(this.innerText);this.innerText='';}}};
+      document.querySelector('[contenteditable]').onkeydown=function(event){if(event.key==='Enter')event.preventDefault();};
     </script>`;
   return `<style>a,[role=button]{display:block;padding:6px}</style><main role="main"><h1>Marketplace</h1></main>
   <a href="https://www.facebook.com/messages/t/999/">Conversa pessoal fora do Marketplace</a>

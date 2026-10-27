@@ -13,8 +13,13 @@ function fixture() {
     id: 1,
     isDestroyed: () => false,
     focus: () => {},
+    getZoomFactor: () => 1,
     executeJavaScript: async (code: string) =>
-      code.includes('"phase":"check"') ? { empty: true } : { focused: true },
+      code.includes('"phase":"check"')
+        ? { empty: true }
+        : code.includes('"phase":"submit"')
+          ? { point: { x: 100, y: 100 } }
+          : { focused: true },
     insertText: async (text: string) => {
       texts.push(text);
     },
@@ -41,6 +46,12 @@ function fixture() {
     events,
     texts,
     change: () => (current = { ...current, key: 'account:other' }),
+    marketplace: () =>
+      (current = {
+        ...current,
+        platform: 'facebook-marketplace',
+        url: 'https://www.facebook.com/messages/t/123/',
+      }),
     contents,
   };
 }
@@ -53,6 +64,15 @@ it('envia Unicode uma vez e devolve o resultado anterior ao repetir uma requisi�
   await expect(f.remote.input({ ...f.command, text: 'Outra mensagem' })).rejects.toThrow(
     'já foi utilizado',
   );
+});
+it('envia no Facebook por um único clique no botão nativo e não usa Enter', async () => {
+  const f = fixture();
+  f.marketplace();
+  expect(await f.remote.input(f.command)).toEqual({ submitted: true, confirmed: true });
+  expect(await f.remote.input(f.command)).toEqual({ submitted: true, confirmed: true });
+  expect(f.events.filter((e) => e.type === 'mouseDown')).toHaveLength(1);
+  expect(f.events.filter((e) => e.type === 'keyDown')).toHaveLength(0);
+  expect(f.texts).toHaveLength(1);
 });
 it('recusa conversa ou página que mudou antes de enviar', async () => {
   const f = fixture();

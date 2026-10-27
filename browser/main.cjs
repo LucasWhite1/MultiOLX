@@ -58,7 +58,7 @@ async function facebookCall(view, command) {
       y >= bounds.height
     )
       throw Error('Controle Marketplace fora da área visível.');
-    if (view === displayedView && win.isFocused()) view.webContents.focus();
+    view.webContents.focus();
     view.webContents.sendInputEvent({ type: 'mouseMove', x, y });
     view.webContents.sendInputEvent({ type: 'mouseDown', x, y, button: 'left', clickCount: 1 });
     view.webContents.sendInputEvent({ type: 'mouseUp', x, y, button: 'left', clickCount: 1 });
@@ -134,8 +134,11 @@ function parkFacebookView(view) {
   let worker = facebookWindows.get(view);
   if (!worker) {
     const window = new BrowserWindow({
-      x: -30000,
-      y: -30000,
+      // Chromium drops native pointer events beyond the desktop bounds. Keep
+      // the worker on the virtual screen, transparent and non-interactive.
+      x: 0,
+      y: 0,
+      opacity: 0,
       width: 1100,
       height: 800,
       show: false,
@@ -144,6 +147,7 @@ function parkFacebookView(view) {
       focusable: false,
       webPreferences: { ...preferences },
     });
+    window.setIgnoreMouseEvents(true);
     worker = { window, attached: false };
     facebookWindows.set(view, worker);
     view.webContents.once('destroyed', () => {

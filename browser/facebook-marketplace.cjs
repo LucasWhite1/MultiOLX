@@ -317,9 +317,12 @@ async function marketplaceDocument(command = {}) {
         )
       : [];
     if (candidates.length === 1) {
-      press(candidates[0]);
+      if (Date.now() - (window.__multiolxFBSelectClick || 0) < 2000)
+        return { status: 'LOADING', diagnostic: { step: 'wait-marketplace' } };
+      window.__multiolxFBSelectClick = Date.now();
       return {
         status: 'LOADING',
+        nativeClick: point(candidates[0]),
         diagnostic: { step: 'select-marketplace' },
       };
     }
@@ -342,14 +345,12 @@ async function marketplaceDocument(command = {}) {
         visibility: document.visibilityState,
         focused: document.hasFocus(),
         dialog: !!dialog,
-        dialogLabels: [...document.querySelectorAll('[role=dialog]')]
-          .filter(visible)
-          .map((n) => ({
-            label: n.getAttribute('aria-label'),
-            marketplaceControls: [...n.querySelectorAll('[role=button],[role=link],a')]
-              .filter((e) => visible(e) && e.innerText.trim().split('\n')[0] === 'Marketplace')
-              .map((e) => ({ role: e.getAttribute('role'), tag: e.tagName })),
-          })),
+        dialogLabels: [...document.querySelectorAll('[role=dialog]')].filter(visible).map((n) => ({
+          label: n.getAttribute('aria-label'),
+          marketplaceControls: [...n.querySelectorAll('[role=button],[role=link],a')]
+            .filter((e) => visible(e) && e.innerText.trim().split('\n')[0] === 'Marketplace')
+            .map((e) => ({ role: e.getAttribute('role'), tag: e.tagName })),
+        })),
         candidates: candidates.length,
         messenger: [...document.querySelectorAll('[role=button][aria-label=Messenger]')].filter(
           visible,

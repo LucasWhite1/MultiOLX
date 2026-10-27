@@ -57,6 +57,90 @@
 .mobile-menu {
   display: none;
 }
+.app-notifications {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.app-unread {
+  background: #dc2626;
+  color: white;
+  min-width: 22px;
+  height: 22px;
+  line-height: 22px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 0 4px;
+  box-sizing: border-box;
+}
+.app-unread[hidden] {
+  display: none;
+}
+.app-settings-dialog {
+  width: min(430px, calc(100vw - 32px));
+  max-height: calc(100dvh - 40px);
+  overflow: auto;
+  box-sizing: border-box;
+  border: 1px solid #e1d9f4;
+  border-radius: 18px;
+  padding: 22px;
+  color: #263043;
+  font-family: system-ui, sans-serif;
+}
+.app-settings-dialog::backdrop {
+  background: #17112b66;
+}
+.app-settings-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.app-settings-heading h2 {
+  margin: 0;
+  font-size: 20px;
+}
+.app-settings-dialog h3 {
+  margin: 24px 0 8px;
+  font-size: 17px;
+}
+.app-settings-dialog p {
+  font-size: 14px;
+  line-height: 1.5;
+  color: #687184;
+}
+.app-settings-dialog button {
+  font: inherit;
+  padding: 12px;
+  border-radius: 9px;
+  border: 1px solid #dce0e9;
+  background: white;
+  color: #6430c9;
+  cursor: pointer;
+  min-height: 44px;
+}
+.app-settings-dialog #enablePush,
+.app-settings-dialog #installApp {
+  background: #7c3aed;
+  color: white;
+  width: 100%;
+}
+.app-settings-dialog #testPush {
+  margin-top: 10px;
+  width: 100%;
+}
+.app-settings-dialog #testPush[hidden],
+.app-settings-dialog #installApp[hidden] {
+  display: none;
+}
+.app-settings-dialog .app-settings-hint {
+  font-size: 12px;
+}
+.app-settings-dialog #pushStatus {
+  color: #4b2691;
+}
 .menu-backdrop {
   display: none;
 }

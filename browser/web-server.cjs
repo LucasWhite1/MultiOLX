@@ -80,6 +80,25 @@ async function createWebServer(options) {
   let controller = null,
     leaseUntil = 0,
     loginBusy = false;
+  let idleTimer,
+    closing = false;
+  const viewers = () =>
+    [...streams].some(
+      ([id, set]) => set.size && (sessions.get(id)?.visibleUntil || 0) > Date.now(),
+    );
+  const checkViewers = () => {
+    if (closing) return;
+    if (viewers()) {
+      clearTimeout(idleTimer);
+      idleTimer = null;
+    } else if (!idleTimer && options.idle) {
+      idleTimer = setTimeout(() => {
+        idleTimer = null;
+        if (!viewers()) void Promise.resolve(options.idle()).catch(() => {});
+      }, options.idleDelay ?? 5000);
+      idleTimer.unref();
+    }
+  };
   const same = (a, b) =>
     typeof a === 'string' &&
     typeof b === 'string' &&
@@ -95,6 +114,7 @@ async function createWebServer(options) {
     sessions.delete(id);
     for (const res of streams.get(id) || []) res.end();
     streams.delete(id);
+    checkViewers();
     if (controller === id) {
       controller = null;
       leaseUntil = 0;
@@ -147,6 +167,7 @@ async function createWebServer(options) {
     ['/listing-ui.js', ['listing-ui.js', 'text/javascript']],
     ['/ad-management-ui.js', ['ad-management-ui.js', 'text/javascript']],
     ['/web-bridge.js', ['web-bridge.js', 'text/javascript']],
+    ['/pwa.js', ['pwa.js', 'text/javascript']],
     ['/web.css', ['web.css', 'text/css']],
     ['/login.js', ['login.js', 'text/javascript']],
   ]);
@@ -157,12 +178,33 @@ async function createWebServer(options) {
     res.setHeader('X-Frame-Options', 'DENY');
     res.setHeader(
       'Content-Security-Policy',
-      "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+      "default-src 'none'; script-src 'self'; worker-src 'self'; manifest-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
     );
     if (config.secure) res.setHeader('Strict-Transport-Security', 'max-age=31536000');
     try {
       const url = new URL(req.url, 'http://internal');
       if (req.method === 'GET' && url.pathname === '/healthz') return json(res, 200, { ok: true });
+      if (
+        req.method === 'GET' &&
+        [
+          '/manifest.webmanifest',
+          '/sw.js',
+          '/icons/app-192.png',
+          '/icons/app-512.png',
+          '/icons/badge-96.png',
+        ].includes(url.pathname)
+      ) {
+        res.setHeader(
+          'Content-Type',
+          url.pathname.endsWith('.png')
+            ? 'image/png'
+            : url.pathname.endsWith('.js')
+              ? 'text/javascript; charset=utf-8'
+              : 'application/manifest+json',
+        );
+        if (url.pathname === '/sw.js') res.setHeader('Service-Worker-Allowed', '/');
+        return res.end(await fs.readFile(path.join(__dirname, url.pathname.slice(1))));
+      }
       if (
         req.method === 'POST' &&
         (req.headers.origin !== config.origin ||
@@ -217,13 +259,32 @@ async function createWebServer(options) {
       }
       if (!auth) {
         if (req.method === 'GET' && url.pathname === '/') {
-          res.writeHead(302, { Location: '/login' });
+          const next =
+            url.searchParams.has('conversation') || url.searchParams.has('app')
+              ? '/login?next=' + encodeURIComponent('/' + url.search)
+              : '/login';
+          res.writeHead(302, { Location: next });
           return res.end();
         }
         return json(res, 401, { error: 'Entre novamente para continuar.' });
       }
       if (req.method === 'POST' && !same(req.headers['x-csrf-token'], auth.csrf))
         return json(res, 403, { error: 'Sessão inválida. Atualize a página.' });
+      if (req.method === 'GET' && url.pathname === '/api/push')
+        return json(res, 200, { available: !!options.push, publicKey: options.push?.publicKey });
+      if (
+        req.method === 'POST' &&
+        ['/api/push/subscribe', '/api/push/unsubscribe', '/api/push/test'].includes(url.pathname)
+      ) {
+        if (!options.push) return json(res, 503, { error: 'Notificações indisponíveis.' });
+        const input = await body(req, 8192);
+        const result = url.pathname.endsWith('/subscribe')
+          ? await options.push.subscribe(input.subscription)
+          : url.pathname.endsWith('/unsubscribe')
+            ? await options.push.unsubscribe(input.endpoint)
+            : await options.push.test(input.endpoint);
+        return json(res, 200, result);
+      }
       if (req.method === 'GET' && url.pathname === '/api/session')
         return json(res, 200, {
           user: config.user,
@@ -232,6 +293,12 @@ async function createWebServer(options) {
           batch: options.batch?.(),
           controller: controller === auth.id || !controller || leaseUntil < Date.now(),
         });
+      if (req.method === 'POST' && url.pathname === '/api/presence') {
+        const input = await body(req, 1024);
+        sessions.get(auth.id).visibleUntil = input.visible === true ? Date.now() + 45000 : 0;
+        checkViewers();
+        return json(res, 200, { ok: true });
+      }
       if (req.method === 'POST' && url.pathname === '/api/logout') {
         remove(auth.id);
         res.setHeader('Set-Cookie', cookie('', 0));
@@ -255,7 +322,13 @@ async function createWebServer(options) {
         res.write(': connected\n\n');
         if (!streams.has(auth.id)) streams.set(auth.id, new Set());
         streams.get(auth.id).add(res);
-        req.on('close', () => streams.get(auth.id)?.delete(res));
+        if (sessions.get(auth.id).visibleUntil === undefined)
+          sessions.get(auth.id).visibleUntil = Date.now() + 45000;
+        checkViewers();
+        req.on('close', () => {
+          streams.get(auth.id)?.delete(res);
+          checkViewers();
+        });
         return;
       }
       if (req.method === 'POST' && url.pathname === '/api/rpc') {
@@ -307,7 +380,7 @@ async function createWebServer(options) {
           .replace(/    <meta\s+http-equiv="Content-Security-Policy"[\s\S]*?\/>/, '')
           .replace(
             '</head>',
-            '<link rel="stylesheet" href="web.css"><script src="web-bridge.js" defer></script></head>',
+            '<link rel="stylesheet" href="web.css"><link rel="manifest" href="/manifest.webmanifest"><meta name="theme-color" content="#7c3aed"><link rel="apple-touch-icon" href="/icons/app-192.png"><script src="web-bridge.js" defer></script><script src="pwa.js" defer></script></head>',
           );
         // All application scripts must run after the bridge, in document order.
         html = html
@@ -342,6 +415,7 @@ async function createWebServer(options) {
     for (const set of streams.values())
       for (const res of set)
         if (!res.destroyed && !res.writableNeedDrain) res.write(': keepalive\n\n');
+    checkViewers();
   }, 20000);
   heartbeat.unref();
   await new Promise((resolve, reject) => {
@@ -350,6 +424,7 @@ async function createWebServer(options) {
   });
   return {
     server,
+    hasViewers: viewers,
     emit(channel, state) {
       const data = `data: ${JSON.stringify({ channel, state })}\n\n`;
       for (const [id, set] of streams)
@@ -360,7 +435,9 @@ async function createWebServer(options) {
           }
     },
     async close() {
+      closing = true;
       clearInterval(heartbeat);
+      clearTimeout(idleTimer);
       for (const id of sessions.keys()) remove(id);
       await new Promise((resolve) => server.close(resolve));
     },

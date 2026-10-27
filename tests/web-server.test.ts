@@ -8,7 +8,7 @@ afterEach(async () => {
   for (const app of active.splice(0)) await app.close();
 });
 const password = 'Senha de teste! 123456';
-async function server() {
+async function server(extra: any = {}) {
   const calls: any[] = [];
   const app = await createWebServer({
     config: {
@@ -27,6 +27,7 @@ async function server() {
     frame: async () => ({ id: 12, width: 390, height: 700, bytes: Buffer.from('jpeg') }),
     input: async () => ({ ok: true }),
     photos: async () => [],
+    ...extra,
   });
   active.push(app);
   const url = `http://127.0.0.1:${app.port}`;
@@ -54,6 +55,71 @@ it('protege painel, código, imagens e operações antes do login', async () => 
     expect((await fetch(url + route)).status).toBe(401);
   expect((await fetch(url + '/', { redirect: 'manual' })).headers.get('location')).toBe('/login');
   expect((await fetch(url + '/healthz')).status).toBe(200);
+});
+it('serve instalação pública sem expor configuração push e exige CSRF para inscrever dispositivos', async () => {
+  const subscribe = vi.fn(async () => ({ ok: true }));
+  const { url } = await server({ push: { publicKey: 'public-key', subscribe } });
+  for (const route of [
+    '/manifest.webmanifest',
+    '/sw.js',
+    '/icons/app-192.png',
+    '/icons/app-512.png',
+  ])
+    expect((await fetch(url + route)).status).toBe(200);
+  for (const route of ['/api/push', '/pwa.js']) expect((await fetch(url + route)).status).toBe(401);
+  const s = await login(url);
+  const response = await fetch(url + '/api/push', { headers: { Cookie: s.cookie } });
+  expect(await response.json()).toMatchObject({ available: true, publicKey: 'public-key' });
+  const input = { subscription: { endpoint: 'fixture' } };
+  expect(
+    (
+      await fetch(url + '/api/push/subscribe', {
+        method: 'POST',
+        headers: { ...headers(s), 'X-CSRF-Token': 'wrong' },
+        body: JSON.stringify(input),
+      })
+    ).status,
+  ).toBe(403);
+  expect(subscribe).not.toHaveBeenCalled();
+  expect(
+    (
+      await fetch(url + '/api/push/subscribe', {
+        method: 'POST',
+        headers: headers(s),
+        body: JSON.stringify(input),
+      })
+    ).status,
+  ).toBe(200);
+  expect(subscribe).toHaveBeenCalledTimes(1);
+});
+it('preserva destino da notificação ao exigir login', async () => {
+  const { url } = await server();
+  const result = await fetch(url + '/?app=1&conversation=profile%3A123', { redirect: 'manual' });
+  const next = new URL(result.headers.get('location')!, url).searchParams.get('next');
+  expect(next).toBe('/?app=1&conversation=profile%3A123');
+});
+it('fecha detalhes em segundo plano somente quando o último dispositivo deixa de visualizar', async () => {
+  const idle = vi.fn(async () => {});
+  const { url } = await server({ idle, idleDelay: 20 });
+  const a = await login(url),
+    b = await login(url);
+  const streamA = new AbortController(),
+    streamB = new AbortController();
+  await fetch(url + '/api/events', { headers: { Cookie: a.cookie }, signal: streamA.signal });
+  await fetch(url + '/api/events', { headers: { Cookie: b.cookie }, signal: streamB.signal });
+  const hidden = (s: any) =>
+    fetch(url + '/api/presence', {
+      method: 'POST',
+      headers: headers(s),
+      body: JSON.stringify({ visible: false }),
+    });
+  await hidden(a);
+  await new Promise((resolve) => setTimeout(resolve, 40));
+  expect(idle).not.toHaveBeenCalled();
+  await hidden(b);
+  await vi.waitFor(() => expect(idle).toHaveBeenCalledTimes(1), { timeout: 500 });
+  streamA.abort();
+  streamB.abort();
 });
 it('valida origem, CSRF e lista de operações sem permitir IPC arbitrário', async () => {
   const { url, calls } = await server();

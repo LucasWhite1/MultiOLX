@@ -12,6 +12,49 @@ const row = {
   lastDirection: 'outgoing',
   platform: 'facebook-marketplace',
 };
+it('atualiza a prévia enviada na conversa exata e rejeita detalhes mais antigos de outra conversa', () => {
+  const now = Date.now();
+  const inbox = new UnifiedInbox();
+  const profiles = [{ id: 'profile', name: 'Facebook' }];
+  inbox.update(
+    'profile',
+    {
+      status: 'READY',
+      conversations: [{ ...row, preview: 'Cliente: Olá', unread: true, lastDirection: 'incoming' }],
+    },
+    now - 120000,
+  );
+  const detail = {
+    externalId: '123',
+    replacePreview: true,
+    preview: 'Resposta de teste',
+    lastDirection: 'outgoing',
+    messageAt: now,
+    timeLabel: '12:00',
+    viewed: true,
+  };
+  inbox.update('profile', { status: 'DETAIL', detail }, now);
+  expect(inbox.state(profiles).conversations[0]).toMatchObject({
+    preview: 'Resposta de teste',
+    attention: 'outgoing',
+    unread: false,
+    messageAt: now,
+  });
+  inbox.update(
+    'profile',
+    { status: 'DETAIL', detail: { ...detail, externalId: '999', preview: 'Outra conversa' } },
+    now,
+  );
+  inbox.update(
+    'profile',
+    {
+      status: 'DETAIL',
+      detail: { ...detail, preview: 'Histórico antigo', messageAt: now - 86400000 },
+    },
+    now,
+  );
+  expect(inbox.state(profiles).conversations[0].preview).toBe('Resposta de teste');
+});
 it('aceita chave local apenas com a URL exata da caixa Marketplace', () => {
   const externalId = 'marketplace-buy-' + 'a'.repeat(64);
   const local = {

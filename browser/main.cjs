@@ -35,6 +35,7 @@ const { createListingService } = require('./listing-service.cjs');
 const { createDeepSeek } = require('./deepseek.cjs');
 const { installComposerFocus } = require('./composer-focus.cjs');
 const { marketplaceDocument } = require('./facebook-marketplace.cjs');
+const { facebookThreadDocument } = require('./facebook-thread.cjs');
 const { chatComposerDocument } = require('./remote-composer.cjs');
 const facebookInboxUrl = 'https://www.facebook.com/marketplace/inbox/';
 async function facebookCall(view, command) {
@@ -78,6 +79,7 @@ const safeStorage = webMode
   : nativeSafeStorage;
 const webConfiguration = webMode ? require('./web-server.cjs').configuration() : null;
 let webAccess, remoteBrowser;
+let pushService;
 let remoteConversation = null;
 let initialization;
 const remoteHandlers = new Map();
@@ -88,6 +90,7 @@ function registerHandler(name, handler) {
 function notify(channel, state) {
   if (win && !win.isDestroyed()) win.webContents.send(channel, state);
   webAccess?.emit(channel, state);
+  if (channel === 'inbox:state') pushService?.observe(state);
 }
 let walkthroughOwner = null;
 let listingService;
@@ -616,6 +619,18 @@ async function readInbox(id) {
           ensure: entry.view !== displayedView || entry.initializing,
         })
       : await entry.view.webContents.executeJavaScript(`(${readChatDocument.toString()})()`);
+    if (facebook && result.status === 'DETAIL') {
+      const selected = /^https:\/\/www\.facebook\.com\/messages\/t\/(\d+)\/?$/.exec(
+        entry.view.webContents.getURL(),
+      )?.[1];
+      if (
+        selected &&
+        (inbox.accounts.get(id)?.rows || []).some((row) => row.externalId === selected)
+      )
+        result.detail = await entry.view.webContents.executeJavaScript(
+          `(${facebookThreadDocument.toString()})(${JSON.stringify(selected)})`,
+        );
+    }
     if (facebook)
       entry.facebookDiagnostic = {
         ...(result.diagnostic || {}),
@@ -660,8 +675,17 @@ async function readInbox(id) {
     }
     if (result.detail)
       result.detail.viewed =
-        entry.view === displayedView && win.isVisible() && !win.isMinimized() && win.isFocused();
+        entry.view === displayedView &&
+        (webMode
+          ? webAccess?.hasViewers() === true
+          : win.isVisible() && !win.isMinimized() && win.isFocused());
     inbox.update(id, result);
+    if (facebook && result.detail?.replacePreview) {
+      const updated = inbox.accounts
+        .get(id)
+        ?.rows.find((row) => row.externalId === result.detail.externalId);
+      if (updated) entry.facebookRows?.set(updated.externalId, updated);
+    }
     if (['BLOCKED', 'LAYOUT_CHANGED', 'AUTH_REQUIRED'].includes(result.status))
       entry.stopped = true;
   } catch {
@@ -1493,16 +1517,38 @@ async function start() {
   await win.loadURL(localOrigin + '/index.html');
   if (!selfTest) win.show();
   if (webMode) {
+    pushService = await require('./push-service.cjs').createPushService({
+      file: path.join(root, 'notifications.enc'),
+      vault: safeStorage,
+      origin: webConfiguration.origin,
+      initial: inboxState(),
+    });
     remoteBrowser = require('./remote-browser.cjs').createRemoteBrowser({
       window: () => win,
       view: () => displayedView,
       popups,
       owner: () => active,
       conversation: () => (mode === 'unified' && displayedView ? remoteConversation : null),
+      afterSend: async (context) => {
+        if (context.platform !== 'facebook-marketplace') return;
+        await readInbox(context.profileId);
+        for (const delay of [500, 1500, 3500])
+          setTimeout(() => void readInbox(context.profileId), delay);
+      },
       busy: (id) => listingService.isWorker(id),
     });
     webAccess = await require('./web-server.cjs').createWebServer({
       config: webConfiguration,
+      push: pushService,
+      idle: async () => {
+        if (
+          mode === 'unified' &&
+          displayedView &&
+          hasOpenConversation(displayedView) &&
+          !foregroundId
+        )
+          await showUnifiedInbox();
+      },
       invoke: async (channel, args) => {
         const handler = remoteHandlers.get(channel);
         if (!handler) throw Error('Operação indisponível.');
@@ -2520,6 +2566,34 @@ async function start() {
     })()`))
     )
       throw Error('O compositor aceitou responder em uma conversa diferente.');
+    win.focus();
+    fbView.webContents.focus();
+    await fbView.webContents.executeJavaScript(
+      "document.querySelector('[contenteditable]').focus()",
+    );
+    await fbView.webContents.insertText('Resposta simulada no Marketplace');
+    fbView.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Enter' });
+    fbView.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Enter' });
+    for (let i = 0; i < 30; i++) {
+      await readInbox(fbFixture.id);
+      if (
+        inboxState().conversations.find(
+          (c) => c.profileId === fbFixture.id && c.externalId === '123',
+        )?.preview === 'Resposta simulada no Marketplace'
+      )
+        break;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    const sentMarketplaceRow = inboxState().conversations.find(
+      (c) => c.profileId === fbFixture.id && c.externalId === '123',
+    );
+    if (
+      sentMarketplaceRow?.attention !== 'outgoing' ||
+      sentMarketplaceRow.preview !== 'Resposta simulada no Marketplace'
+    )
+      throw Error(
+        'A mensagem enviada no Marketplace não atualizou a prévia e a autoria na lista unificada.',
+      );
     fbView.webContents.focus();
     fbView.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' });
     fbView.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' });

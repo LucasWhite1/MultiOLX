@@ -323,6 +323,36 @@ class UnifiedInbox {
     const detail = result.detail;
     if (detail && ['incoming', 'outgoing'].includes(detail.lastDirection)) {
       rows = rows.map((row) => {
+        if (
+          row.platform === 'facebook-marketplace' &&
+          detail.replacePreview === true &&
+          row.externalId === detail.externalId &&
+          typeof detail.preview === 'string' &&
+          detail.preview.length > 0 &&
+          detail.preview.length <= 10000 &&
+          Number.isFinite(detail.messageAt) &&
+          detail.messageAt <= now + 60000 &&
+          (detail.messageAt >= (row.messageAt || 0) - 60000 ||
+            row.preview.replace(/^Você:\s*/, '') === detail.preview)
+        ) {
+          const changed = row.preview.replace(/^Você:\s*/, '') !== detail.preview;
+          return {
+            ...row,
+            preview: detail.preview,
+            lastDirection: detail.lastDirection,
+            messageAt: detail.messageAt,
+            timeLabel: detail.timeLabel || row.timeLabel,
+            changedAt: changed ? now : row.changedAt,
+            unread:
+              detail.viewed || detail.lastDirection === 'outgoing'
+                ? false
+                : changed
+                  ? true
+                  : row.unread,
+            unreadCount:
+              detail.viewed || detail.lastDirection === 'outgoing' ? null : row.unreadCount,
+          };
+        }
         // Do not associate a stale open message with a newer list preview.
         if (
           (typeof detail.chatId === 'string'

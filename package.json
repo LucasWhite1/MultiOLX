@@ -22,6 +22,7 @@
     "vitest": "^3.2.4"
   },
   "dependencies": {
-    "electron": "^44.7.2"
+    "electron": "^44.7.2",
+    "web-push": "^3.6.7"
   }
 }

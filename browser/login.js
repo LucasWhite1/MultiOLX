@@ -13,7 +13,10 @@ document.getElementById('loginForm').onsubmit = async (event) => {
     });
     const result = await response.json();
     if (!response.ok) throw Error(result.error);
-    location.replace('/');
+    const next = new URL(new URL(location.href).searchParams.get('next') || '/', location.origin);
+    location.replace(
+      next.origin === location.origin && next.pathname === '/' ? next.pathname + next.search : '/',
+    );
   } catch (error) {
     document.getElementById('loginError').textContent = error.message;
   } finally {

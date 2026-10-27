@@ -22,6 +22,8 @@ O **× ao lado do perfil** abre a confirmação de remoção. Remove o perfil e 
 
 A versão web usa login e senha, interface responsiva e os navegadores executando no servidor. A implantação está preparada com Dockerfile, volume persistente, healthcheck e configuração do Easypanel. Consulte [o guia completo](docs/VPS-EASYPANEL.md). Gere suas credenciais com `npm run credentials`; elas ficam no arquivo privado `data/vps-credentials.txt` e não são enviadas ao Git.
 
+No celular, o menu **Aplicativo e notificações** permite instalar na tela inicial e ativar avisos de novas mensagens, com contador de conversas não lidas nos dispositivos compatíveis. Veja [como instalar e ativar](docs/APLICATIVO-NOTIFICACOES.md).
+
 ## Anúncios
 
 O botão **Anúncios** permite criar um conteúdo base, escolher contas e personalizar apenas os campos desejados. Inclui fotos compartilhadas, rascunhos criptografados, revisão por conta e preparo assistido no formulário da OLX. O botão Publicar envia automaticamente nas contas selecionadas, com até duas contas em paralelo, publicação gratuita e entrega pela OLX desmarcada. Cada conta mostra seu próprio progresso e resultado. Veja [o fluxo e os limites](docs/ANUNCIOS.md).
@@ -50,7 +52,7 @@ No Windows, perfis e sessões ficam em **%USERPROFILE%/.multiolx/browser**, fora
 
 O painel antigo foi desativado e seu código movido para **legacy-panel/**, ignorado pelo Git, após a exclusão em lote ser bloqueada pela revisão automática. A pasta de legado não participa da execução, testes ou dependências. Os dados antigos e o arquivo local de configuração foram preservados. O botão Abrir painel e a ponte para localhost:3001 foram retirados. O servidor antigo e seus containers PostgreSQL/Redis foram encerrados, preservando os volumes.
 
-Esta versão é desktop. Hospedagem multiusuário em VPS/Easypanel exige outro projeto de execução remota; o aplicativo não vira um serviço web apenas ao colocá-lo em Docker.
+Os modos desktop e web compartilham o navegador. A versão web usa o servidor autenticado e a execução remota preparados no Docker deste projeto.
 
 ## Verificação
 

@@ -7,6 +7,7 @@ function createRemoteBrowser({
   owner,
   busy,
   conversation = () => null,
+  afterSend = async () => {},
 }) {
   const submissions = new Map();
   let queue = Promise.resolve(),
@@ -144,6 +145,7 @@ function createRemoteBrowser({
               break;
             }
           }
+          if (result.confirmed) await afterSend(context).catch(() => {});
           return result;
         } else if (command.action === 'click') {
           if (

@@ -79,6 +79,22 @@ async function runWebSmoke({
     return;
   }
   const profile = await execute("window.multiBrowser.create('Conta web')");
+  await wait(() => execute("!!document.getElementById('appNotifications')"));
+  await wait(() => execute('navigator.serviceWorker.getRegistration().then(r => !!r?.active)'));
+  const installable = await execute(`(async () => {
+    const manifest = await (await fetch('/manifest.webmanifest')).json();
+    document.getElementById('appNotifications').click();
+    const dialog = document.querySelector('.app-settings-dialog');
+    const rect = dialog.getBoundingClientRect();
+    const visible = dialog.open && rect.left >= 0 && rect.right <= innerWidth && !!document.getElementById('enablePush');
+    dialog.close();
+    return visible && manifest.display === 'standalone' && manifest.icons.some(i => i.sizes === '512x512');
+  })()`);
+  if (!installable)
+    throw Error('Instalação ou configurações de notificações não cabem no celular.');
+  console.log(
+    'MULTIOLX_PWA_OK: manifest, ícones, service worker ativo e configurações acessíveis no celular.',
+  );
   const chatFixture = `<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><style>body{font:16px sans-serif;margin:12px}a{display:block;padding:12px;background:#f5f3ff}textarea{position:fixed;bottom:12px;left:12px;width:85%;height:50px}.bubble{padding:12px;background:#ede9fe;margin:12px 0}</style><title>Chat OLX local</title><a data-testid="chat-list-item" id="mobile" href="?chat-id=mobile"><span class="typo-caption">Produto de teste</span><div class="text-2">Cliente de teste</div><div class="text-1-5">Está disponível?</div><div class="text-1-5">Agora</div></a><div id="messages"></div><script>document.querySelector('a').onclick=e=>{e.preventDefault();history.pushState(null,'','?chat-id=mobile');document.querySelector('#messages').innerHTML='<p>Está disponível?</p><textarea aria-label="Mensagem"></textarea>';document.querySelector('textarea').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();const p=document.createElement('p');p.className='bubble';p.textContent=e.target.value;document.querySelector('#messages').prepend(p);window.sent=(window.sent||[]).concat(e.target.value);e.target.value='';}};};</script>`;
   const ses = await openSession(profile.id);
   ses.protocol.handle(

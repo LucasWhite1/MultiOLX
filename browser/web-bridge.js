@@ -186,6 +186,7 @@
   mobileScreen.addEventListener('change', placeResources);
   placeResources();
   logout.onclick = async () => {
+    await window.multiPwa?.disable();
     await request('/api/logout', {});
     stream?.close();
     location.replace('/login');
@@ -491,6 +492,21 @@
     }
   }
   ready.then((session) => {
+    const presence = (visible) => {
+      if (!csrf) return;
+      void fetch('/api/presence', {
+        method: 'POST',
+        keepalive: true,
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+        body: JSON.stringify({ visible }),
+      }).catch(() => {});
+    };
+    document.addEventListener('visibilitychange', () => presence(!document.hidden));
+    window.addEventListener('pagehide', () => presence(false));
+    setInterval(() => {
+      if (!document.hidden) presence(true);
+    }, 15000);
+    presence(!document.hidden);
     setTimeout(() => notify('browser:state', session.state), 0);
     stream = new EventSource('/api/events');
     stream.onmessage = (event) => {

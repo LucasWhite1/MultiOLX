@@ -21,6 +21,41 @@ function messageTime(label, observedAt) {
     day.setDate(day.getDate() - 1);
     return day.getTime();
   }
+  const weekday = {
+    domingo: 0,
+    dom: 0,
+    sunday: 0,
+    sun: 0,
+    segunda: 1,
+    seg: 1,
+    monday: 1,
+    mon: 1,
+    terca: 2,
+    ter: 2,
+    tuesday: 2,
+    tue: 2,
+    quarta: 3,
+    qua: 3,
+    wednesday: 3,
+    wed: 3,
+    quinta: 4,
+    qui: 4,
+    thursday: 4,
+    thu: 4,
+    sexta: 5,
+    sex: 5,
+    friday: 5,
+    fri: 5,
+    sabado: 6,
+    sab: 6,
+    saturday: 6,
+    sat: 6,
+  }[text.replace(/-feira$/, '').replace(/\.$/, '')];
+  if (weekday !== undefined) {
+    const days = (day.getDay() - weekday + 7) % 7 || 7;
+    day.setDate(day.getDate() - days);
+    return day.getTime();
+  }
   if ((match = /^(\d{1,2})\/(\d{1,2})(?:\/(\d{2}|\d{4}))?$/.exec(text))) {
     const year = match[3] ? (+match[3] < 100 ? 2000 + +match[3] : +match[3]) : ref.getFullYear();
     const date = new Date(year, +match[2] - 1, +match[1]);

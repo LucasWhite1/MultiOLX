@@ -6,6 +6,17 @@ async function marketplaceDocument(command = {}) {
     /login|checkpoint|two_step_verification/.test(location.pathname)
   )
     return { status: 'AUTH_REQUIRED' };
+  const selectedThread = /^\/messages\/t\/(\d+)\/?$/.exec(location.pathname)?.[1];
+  if (selectedThread) {
+    // Never import the general Messenger list from the full thread page.
+    if (!(command.known || []).some((row) => row.externalId === selectedThread))
+      return { status: 'LAYOUT_CHANGED' };
+    return {
+      status: document.querySelector('[contenteditable=true][role=textbox],textarea')
+        ? 'DETAIL'
+        : 'OPENING',
+    };
+  }
   if (!/^\/marketplace\/inbox\/?$/.test(location.pathname)) return { status: 'LAYOUT_CHANGED' };
   const visible = (n) =>
     n instanceof HTMLElement &&
@@ -34,7 +45,7 @@ async function marketplaceDocument(command = {}) {
         !u.password &&
         !u.search &&
         !u.hash &&
-        /^\/messages\/t\/(\d+)\/$/.exec(u.pathname)?.[1]
+        /^\/messages\/t\/(\d+)\/?$/.exec(u.pathname)?.[1]
       );
     } catch {
       return null;
@@ -306,9 +317,9 @@ async function marketplaceDocument(command = {}) {
         )
       : [];
     if (candidates.length === 1) {
+      press(candidates[0]);
       return {
         status: 'LOADING',
-        nativeClick: point(candidates[0]),
         diagnostic: { step: 'select-marketplace' },
       };
     }
@@ -318,9 +329,9 @@ async function marketplaceDocument(command = {}) {
       );
       if (messenger) {
         window.__multiolxFBFolderClick = Date.now();
+        press(messenger);
         return {
           status: 'LOADING',
-          nativeClick: point(messenger),
           diagnostic: { step: 'open-messenger' },
         };
       }

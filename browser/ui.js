@@ -104,14 +104,16 @@ function renderInbox() {
   );
   const query = el('inboxSearch').value.trim().toLocaleLowerCase('pt-BR');
   const attention = el('attentionFilter').value;
-  el('filterToggle').classList.toggle('filters-active', !!(filter || attention));
+  const platform = el('platformFilter').value;
+  el('filterToggle').classList.toggle('filters-active', !!(filter || attention || platform));
   el('filterToggle').setAttribute(
     'aria-label',
-    filter || attention ? 'Filtrar conversas · filtros ativos' : 'Filtrar conversas',
+    filter || attention || platform ? 'Filtrar conversas · filtros ativos' : 'Filtrar conversas',
   );
   const rows = inbox.conversations.filter(
     (c) =>
       (!filter || c.profileId === filter) &&
+      (!platform || (c.platform || 'olx') === platform) &&
       (!attention || c.attention === attention) &&
       (!query ||
         [c.contact, c.listingTitle, c.preview, c.profileName]
@@ -149,7 +151,7 @@ function renderInbox() {
           'aria-label',
           c.unreadCount
             ? `${c.unreadCount} mensagens não lidas`
-            : 'Mensagem não lida; quantidade não informada pela OLX',
+            : `Mensagem não lida; quantidade não informada pelo ${c.platform === 'facebook-marketplace' ? 'Facebook' : 'site da OLX'}`,
         );
         meta.append(badge);
       }
@@ -201,7 +203,7 @@ function renderInbox() {
     el('inboxRows').append(
       text(
         'p',
-        query || filter || attention
+        query || filter || attention || platform
           ? 'Nenhuma conversa corresponde ao filtro.'
           : 'As conversas aparecerão quando os chats carregarem. Contas vazias são identificadas pela OLX.',
         'inbox-empty',
@@ -252,9 +254,11 @@ el('refreshInbox').onclick = () =>
 el('inboxSearch').oninput = renderInbox;
 el('inboxFilter').onchange = renderInbox;
 el('attentionFilter').onchange = renderInbox;
+el('platformFilter').onchange = renderInbox;
 el('clearFilters').onclick = () => {
   el('inboxFilter').value = '';
   el('attentionFilter').value = '';
+  el('platformFilter').value = '';
   renderInbox();
 };
 el('economy').onchange = () =>

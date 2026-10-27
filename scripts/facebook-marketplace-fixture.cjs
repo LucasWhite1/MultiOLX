@@ -1,4 +1,7 @@
-function facebookMarketplaceFixture() {
+function facebookMarketplaceFixture(url = 'https://www.facebook.com/marketplace/inbox/') {
+  const id = /^\/messages\/t\/(\d+)\/?$/.exec(new URL(url).pathname)?.[1];
+  if (id)
+    return `<main role="main"><h1>${id === '123' ? 'Cliente · Produto real' : 'Outro · Outro produto'}</h1><span>Marketplace</span><div aria-label="Mensagens">Histórico da conversa ${id}</div><div contenteditable="true" role="textbox" aria-label="Mensagem"></div></main>`;
   return `<style>a,[role=button]{display:block;padding:6px}</style><main role="main"><h1>Marketplace</h1></main>
   <a href="https://www.facebook.com/messages/t/999/">Conversa pessoal fora do Marketplace</a>
   <div role="button" aria-label="Messenger" onclick="showMessenger()">Messenger</div>

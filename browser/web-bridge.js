@@ -263,7 +263,7 @@
       if (conversationKey === key)
         replyNotice.textContent = result.empty
           ? 'Campo da conversa pronto para responder.'
-          : 'Há texto no campo da OLX. Confira o rascunho antes de enviar.';
+          : 'Há texto no campo da conversa. Confira o rascunho antes de enviar.';
       if (conversationKey === key && result.empty)
         document.getElementById('status').textContent = replyNotice.textContent;
     } catch (error) {

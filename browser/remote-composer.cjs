@@ -8,10 +8,21 @@ function chatComposerDocument(context) {
   if (context.platform === 'facebook-marketplace') {
     if (location.origin !== 'https://www.facebook.com')
       throw Error('A página mudou. Reabra a conversa.');
+    const expected = /^\/messages\/t\/(\d+)\/?$/.exec(new URL(context.url).pathname)?.[1];
+    const actual = /^\/messages\/t\/(\d+)\/?$/.exec(location.pathname)?.[1];
+    if (actual) {
+      if (!expected || actual !== expected)
+        throw Error('A conversa mudou. Volte à lista e abra novamente.');
+      const mains = [...document.querySelectorAll('main,[role=main]')].filter(
+        (n) => visible(n) && n.querySelector('[contenteditable=true][role=textbox],textarea'),
+      );
+      const leaves = mains.filter((n) => !mains.some((other) => other !== n && n.contains(other)));
+      if (leaves.length === 1) scope = leaves[0];
+    }
     const scopes = [];
-    for (const close of document.querySelectorAll(
-      '[aria-label="Fechar conversa"],[aria-label="Close chat"]',
-    )) {
+    for (const close of !actual
+      ? document.querySelectorAll('[aria-label="Fechar conversa"],[aria-label="Close chat"]')
+      : []) {
       for (
         let p = close.parentElement, i = 0;
         p && i < 10 && !p.matches('body,html');

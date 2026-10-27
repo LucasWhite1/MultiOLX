@@ -27,6 +27,31 @@ const profiles = [
   { id: 'facebook', name: 'Facebook' },
   { id: 'olx', name: 'OLX' },
 ];
+it('interpreta dias da semana da OLX e mistura com datas do Facebook', () => {
+  expect(messageTime('Segunda', now)).toBe(new Date(2026, 9, 12).getTime());
+  expect(messageTime('Terça-feira', now)).toBe(new Date(2026, 9, 13).getTime());
+  expect(messageTime('Sábado', now)).toBe(new Date(2026, 9, 10).getTime());
+  const inbox = new UnifiedInbox();
+  inbox.restore(
+    [
+      {
+        id: 'olx',
+        observedAt: now,
+        rows: [
+          {
+            ...row('9', 'Segunda'),
+            platform: undefined,
+            url: 'https://chat.olx.com.br/?chat-id=9',
+            messageAt: null,
+          },
+        ],
+      },
+    ],
+    profiles,
+  );
+  inbox.update('facebook', { status: 'READY', conversations: [row('1', '8 d')] }, now);
+  expect(inbox.state(profiles).conversations.map((r: any) => r.externalId)).toEqual(['9', '1']);
+});
 it('ordena por data da mensagem entre contas, sem promover histórico importado depois ou prévias atualizadas', () => {
   const inbox = new UnifiedInbox();
   inbox.update(

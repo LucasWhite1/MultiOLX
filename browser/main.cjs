@@ -1261,7 +1261,10 @@ async function start() {
             forward: false,
           });
         }
-        await view.webContents.loadURL(url || 'https://www2.olx.com.br/desapega');
+        await require('./listing-navigation.cjs').navigatePublisher(
+          view.webContents,
+          url || 'https://www2.olx.com.br/desapega',
+        );
         if (url) return view.webContents;
         const until = Date.now() + 12000;
         do {
@@ -2379,6 +2382,19 @@ async function start() {
         }),
     );
     await wizardContents.loadURL('https://www2.olx.com.br/desapega');
+    const knownCondition = await require('./listing-attributes.cjs').fillKnownCondition(
+      { condition: 'Novo' },
+      {
+        assertActive() {},
+        pause: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+        dom: (command) =>
+          wizardContents.executeJavaScript(
+            `(${attributeDocument.toString()})(${JSON.stringify(command)})`,
+          ),
+      },
+    );
+    if (knownCondition.pending.length || knownCondition.changes.length !== 1)
+      throw Error('A condição explícita não foi aplicada sem IA nos seletores com portal.');
     const portalResult = await fillAttributes(
       { condition: 'Novo' },
       {

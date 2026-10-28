@@ -67,6 +67,40 @@ const field = (...keys: string[]) => ({
   fields: Object.fromEntries(keys.map((k) => [k, { id: k }])),
   canContinue: true,
 });
+it('corrige a condição explícita antes de interromper por campo obrigatório, sem IA', async () => {
+  const w = wizard([
+    {
+      status: 'FORM',
+      stage: 'attributes',
+      categoryText: 'Furadeiras e Parafusadeiras',
+      errors: ['Campo obrigatório'],
+      canContinue: true,
+    },
+    { status: 'SUBMITTED' },
+  ]);
+  w.p.listing.category = 'parafusadeira';
+  let calls = 0;
+  Object.assign(w.io, {
+    knownAttributes: async () => {
+      calls++;
+      w.io.inspect = async () => ({
+        status: 'FORM',
+        stage: 'attributes',
+        categoryText: 'Furadeiras e Parafusadeiras Novo',
+        errors: [],
+        canContinue: true,
+      });
+      return { changes: ['Condição: Novo'], pending: [] };
+    },
+  });
+  w.io.advance = async () => {
+    w.io.inspect = async () => ({ status: 'SUBMITTED' });
+    return true;
+  };
+  const result = await prepareListingSteps(w.p, w.io);
+  expect(calls).toBe(1);
+  expect(result.submitted).toBe(true);
+});
 it('conclui entrega e publicação gratuita uma única vez no modo automático', async () => {
   const w = wizard([
     field('title', 'description', 'price', 'postalCode'),

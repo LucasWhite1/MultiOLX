@@ -127,6 +127,38 @@ function attributeDocument(command) {
   if (command.action === 'value') return field.innerText.trim();
   throw new Error('Ação de característica inválida.');
 }
+async function fillKnownCondition(product, io) {
+  if (!product.condition) return { changes: [], pending: [] };
+  const fields = (await io.dom({ action: 'list' })).filter((field) =>
+    /condition|condicao/.test(
+      (field.label + ' ' + field.id)
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase(),
+    ),
+  );
+  const changes = [],
+    pending = [];
+  for (const field of fields) {
+    io.assertActive();
+    if (field.current === product.condition) continue;
+    await io.dom({ action: 'open', id: field.id });
+    let options = [];
+    for (let attempt = 0; attempt < 10; attempt++) {
+      await io.pause(150);
+      options = await io.dom({ action: 'options', id: field.id });
+      if (options.length) break;
+    }
+    if (options.includes(product.condition))
+      await io.dom({ action: 'select', id: field.id, option: product.condition });
+    await io.pause(200);
+    await io.dom({ action: 'close', id: field.id });
+    if ((await io.dom({ action: 'value', id: field.id })) !== product.condition)
+      pending.push(field.label);
+    else changes.push(field.label + ': ' + product.condition);
+  }
+  return { changes, pending };
+}
 async function fillAttributes(product, io) {
   const fields = await io.dom({ action: 'list' });
   const changes = [],
@@ -199,4 +231,4 @@ async function fillAttributes(product, io) {
   }
   return { compatible, changes, pending, decisions };
 }
-module.exports = { attributeDocument, fillAttributes };
+module.exports = { attributeDocument, fillAttributes, fillKnownCondition };

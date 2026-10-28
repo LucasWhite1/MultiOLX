@@ -151,7 +151,10 @@ function inspectListingForm() {
       .slice(0, 6),
     requiredAttributes:
       [...document.querySelectorAll('[role=combobox][aria-required=true],select[required]')].filter(
-        (n) => visible(n) && !(n.value || n.getAttribute('aria-valuetext')),
+        (n) => {
+          const value = n.value || n.getAttribute('aria-valuetext') || n.innerText?.trim();
+          return visible(n) && (!value || /^(Selecione|Escolha)(\b|$)/i.test(value));
+        },
       ).length + nativeRequiredErrors.length,
     categoryText: text.slice(0, 10000),
     canContinue: next.length === 1 && !next[0].disabled,

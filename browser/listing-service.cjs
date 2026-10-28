@@ -16,7 +16,11 @@ const {
 const { runPool } = require('./publish-pool.cjs');
 const { onboardingScript } = require('./listing-onboarding.cjs');
 const { prepareListingSteps } = require('./listing-runner.cjs');
-const { attributeDocument, fillAttributes } = require('./listing-attributes.cjs');
+const {
+  attributeDocument,
+  fillAttributes,
+  fillKnownCondition,
+} = require('./listing-attributes.cjs');
 const { createAdManagement } = require('./ad-management.cjs');
 function createListingService(options) {
   const {
@@ -400,6 +404,12 @@ function createListingService(options) {
             return execute(attributeDocument, { action: 'category', option: answer.option });
           }
         : undefined,
+      knownAttributes: () =>
+        fillKnownCondition(p.listing, {
+          assertActive,
+          pause: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+          dom: (command) => execute(attributeDocument, command),
+        }),
       attributes: options.ai?.status().enabled
         ? async (state) => {
             let photos;

@@ -1,6 +1,51 @@
 import { expect, it } from 'vitest';
 import { createRequire } from 'node:module';
-const { fillAttributes } = createRequire(import.meta.url)('../browser/listing-attributes.cjs');
+const { fillAttributes, fillKnownCondition } = createRequire(import.meta.url)(
+  '../browser/listing-attributes.cjs',
+);
+it('preenche a condição explícita sem consultar IA e preserva o tipo já preenchido pela OLX', async () => {
+  let condition = 'Selecione';
+  const selected: string[] = [];
+  const result = await fillKnownCondition(
+    { condition: 'Novo' },
+    {
+      assertActive() {},
+      pause: async () => {},
+      dom: async (command: any) => {
+        if (command.action === 'list')
+          return [
+            { id: 'tools_type', label: 'Tipo', current: 'Furadeiras e Parafusadeiras' },
+            { id: 'tools_condition', label: 'Condição', current: condition },
+          ];
+        expect(command.id).toBe('tools_condition');
+        if (command.action === 'options') return ['Novo', 'Usado - Excelente'];
+        if (command.action === 'select') {
+          condition = command.option;
+          selected.push(command.option);
+        }
+        if (command.action === 'value') return condition;
+      },
+    },
+  );
+  expect(selected).toEqual(['Novo']);
+  expect(result.pending).toEqual([]);
+});
+it('não inventa uma condição equivalente se a opção exata estiver indisponível', async () => {
+  const result = await fillKnownCondition(
+    { condition: 'Novo' },
+    {
+      assertActive() {},
+      pause: async () => {},
+      dom: async (command: any) =>
+        command.action === 'list'
+          ? [{ id: 'condition', label: 'Condição', current: 'Selecione' }]
+          : command.action === 'options'
+            ? ['Usado - Bom']
+            : 'Selecione',
+    },
+  );
+  expect(result.pending).toEqual(['Condição']);
+});
 function fixture() {
   const values: any = { type: 'Produtos para pele', brand: 'Selecione' };
   const selected: string[] = [];

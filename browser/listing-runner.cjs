@@ -58,6 +58,16 @@ async function prepareListingSteps(p, io) {
       await io.pause(500);
       continue;
     }
+    if (state.stage === 'attributes' && io.knownAttributes && !p.conditionAttempted) {
+      const known = await io.knownAttributes();
+      io.assertActive();
+      if (known.pending.length) {
+        reason = 'A OLX não confirmou a condição selecionada: ' + known.pending.join(', ');
+        break;
+      }
+      p.conditionAttempted = true;
+      state = await io.inspect();
+    }
     if (state.stage === 'attributes' && io.attributes && !p.aiAttempted) {
       let assisted;
       try {

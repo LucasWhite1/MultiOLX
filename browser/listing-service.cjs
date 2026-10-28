@@ -229,11 +229,18 @@ function createListingService(options) {
       if (!['published', 'not_sent'].includes(result)) throw new Error('Resultado inválido.');
       const d = catalog.find(id),
         entry = d.deliveries[owner];
-      if (!entry || !['REVIEW', 'UNCERTAIN'].includes(entry.state))
+      if (
+        !entry ||
+        !(
+          ['REVIEW', 'UNCERTAIN'].includes(entry.state) ||
+          (entry.state === 'READY' && result === 'published')
+        )
+      )
         throw new Error('Este resultado não pode ser alterado.');
       return catalog.delivery(id, owner, {
         ...entry,
-        state: result === 'published' ? 'PUBLISHED' : 'DRAFT',
+        state:
+          result === 'published' ? (entry.state === 'READY' ? 'SUBMITTED' : 'PUBLISHED') : 'DRAFT',
         message:
           result === 'published'
             ? 'Envio confirmado por você. A situação na OLX não foi consultada automaticamente.'
@@ -716,7 +723,9 @@ function createListingService(options) {
           ) {
             update(
               index,
-              'NEEDS_ACTION',
+              ['PUBLISHED', 'SUBMITTED'].includes(item.delivery.state)
+                ? item.delivery.state
+                : 'NEEDS_ACTION',
               item.delivery.message || 'Confira o envio anterior na OLX antes de repetir.',
             );
             return;

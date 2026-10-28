@@ -399,12 +399,13 @@
           if (item.errors.length)
             card.append(node('p', 'Complete: ' + item.errors.join(', '), 'error'));
           if (item.delivery) card.append(node('p', item.delivery.message, 'listing-delivery'));
-          if (['REVIEW', 'UNCERTAIN'].includes(item.delivery?.state)) {
+          if (['REVIEW', 'UNCERTAIN', 'READY'].includes(item.delivery?.state)) {
             const results = node('div', undefined, 'listing-result-actions');
             for (const [value, label] of [
               ['published', 'Conferi na OLX: foi enviado'],
               ['not_sent', 'Conferi na OLX: não foi enviado'],
             ]) {
+              if (item.delivery.state === 'READY' && value === 'not_sent') continue;
               const action = node('button', label);
               action.type = 'button';
               action.onclick = () =>

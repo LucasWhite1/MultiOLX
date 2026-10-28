@@ -129,8 +129,8 @@ const sessions = new Map(),
   popups = new Map();
 const inbox = new UnifiedInbox();
 const facebookWindows = new Map();
-function parkFacebookView(view) {
-  if (profiles.find((p) => views.get(p.id) === view)?.provider !== 'facebook') return;
+function parkFacebookView(view, publisher = false) {
+  if (!publisher && profiles.find((p) => views.get(p.id) === view)?.provider !== 'facebook') return;
   let worker = facebookWindows.get(view);
   if (!worker) {
     const window = new BrowserWindow({
@@ -1244,7 +1244,10 @@ async function start() {
       if (!background) foregroundId = owner;
       try {
         const view = await acquirePage(owner);
-        if (background) view.webContents.setBackgroundThrottling(false);
+        if (background) {
+          view.webContents.setBackgroundThrottling(false);
+          if (view !== displayedView) parkFacebookView(view, true);
+        }
         chatViews.delete(owner);
         inbox.update(owner, { status: 'PAUSED' });
         publishInbox();

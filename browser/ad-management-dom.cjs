@@ -139,6 +139,13 @@ function adManagementDocument(command = {}) {
     return {
       ready:
         rows.length > 0 || /nenhum anúncio|você ainda não|não encontramos anúncios/i.test(text),
+      diagnostic: {
+        visibility: document.visibilityState,
+        links: links.length,
+        rows: rows.length,
+        page: location.pathname,
+        loading: document.querySelectorAll('[aria-busy=true],[role=progressbar]').length,
+      },
       items: rows.map(({ id, title, price, url, controls, card }) => ({
         id,
         title,

@@ -101,6 +101,22 @@ it('corrige a condição explícita antes de interromper por campo obrigatório,
   expect(calls).toBe(1);
   expect(result.submitted).toBe(true);
 });
+it('aguarda a página lenta de entrega em vez de interromper antes de seus controles aparecerem', async () => {
+  const w = wizard([{ status: 'ONBOARDING' }, { status: 'OFFERS', canSubmit: true }]);
+  w.p.photosAttached = true;
+  w.p.filled = ['title', 'description', 'price', 'postalCode'];
+  Object.assign(w.io, {
+    onboarding: async () => {
+      if (w.stats().time < 15000) return { progress: false, stage: 'UNKNOWN' };
+      await w.io.advance();
+      return { progress: true, stage: 'DELIVERY' };
+    },
+  });
+  const result = await prepareListingSteps(w.p, w.io);
+  expect(result.canSubmit).toBe(true);
+  expect(w.stats().time).toBeGreaterThanOrEqual(15000);
+  expect(w.stats().time).toBeLessThan(30000);
+});
 it('conclui entrega e publicação gratuita uma única vez no modo automático', async () => {
   const w = wizard([
     field('title', 'description', 'price', 'postalCode'),

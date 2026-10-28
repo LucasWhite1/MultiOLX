@@ -152,7 +152,7 @@ async function prepareListingSteps(p, io) {
           await io.pause(600);
           continue;
         }
-        if (io.now() - waitingSince < 10000 && step.stage !== 'IDENTITY') {
+        if (io.now() - waitingSince < 30000 && step.stage !== 'IDENTITY') {
           await io.pause(300);
           continue;
         }

@@ -846,7 +846,7 @@ async function scanProfiles() {
     while (scanQueue.length && !quitting) {
       const { id, retry } = scanQueue.shift();
       if (id === walkthroughOwner) continue;
-      if (listingService?.ownsPage(id)) continue;
+      if (listingService?.ownsPage(id) || listingService?.retainsPage(id)) continue;
       const existing = views.get(id);
       if (foregroundId === id || (existing === displayedView && hasOpenConversation(existing)))
         continue;

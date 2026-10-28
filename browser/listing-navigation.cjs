@@ -1,6 +1,22 @@
-async function navigatePublisher(contents, url) {
+async function navigatePublisher(contents, url, timeoutMs = 20000) {
+  let timer, onReady;
+  const ready = new Promise((resolve) => {
+    onReady = resolve;
+    contents.once?.('dom-ready', onReady);
+  });
   try {
-    await contents.loadURL(url);
+    await Promise.race([
+      contents.loadURL(url),
+      ready,
+      new Promise((_, reject) => {
+        timer = setTimeout(() => {
+          if (!contents.isDestroyed()) contents.stop?.();
+          reject(
+            new Error('A OLX demorou para abrir a página. Confira esta conta antes de repetir.'),
+          );
+        }, timeoutMs);
+      }),
+    ]);
   } catch (error) {
     if (error?.code !== 'ERR_ABORTED' && error?.errno !== -3) throw error;
     // OLX can redirect the public listing route before loadURL resolves. Never
@@ -12,6 +28,9 @@ async function navigatePublisher(contents, url) {
     const destination = new URL(contents.getURL());
     if (destination.protocol !== 'https:' || !/(^|\.)olx\.com\.br$/.test(destination.hostname))
       throw error;
+  } finally {
+    clearTimeout(timer);
+    contents.removeListener?.('dom-ready', onReady);
   }
 }
 module.exports = { navigatePublisher };

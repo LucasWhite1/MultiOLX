@@ -45,6 +45,7 @@ function createListingService(options) {
   let batch = null,
     batchWork = Promise.resolve();
   const workers = new Map();
+  const pendingPages = new Map();
   const diagnostics = new Map();
   const batchState = () => structuredClone(batch);
   const notifyBatch = () => options.batchChanged?.(batchState());
@@ -740,6 +741,8 @@ function createListingService(options) {
             }),
           );
           const result = await fillPrepared(revision, p, true, !prepareOnly);
+          if (!result.submitted) pendingPages.set(owner, contents);
+          else pendingPages.delete(owner);
           diagnostics.set(owner, {
             message: result.message,
             ai: result.aiReview,
@@ -806,6 +809,7 @@ function createListingService(options) {
           delete saved.deliveries[id];
         }
         if (prepared?.owner === id) prepared = null;
+        pendingPages.delete(id);
         return { ok: true };
       }),
     checkBackground: (id) => startBatch(id, catalog.find(id).revision, true),
@@ -844,6 +848,12 @@ function createListingService(options) {
       await adManager.wait();
       await queue;
     },
+    retainsPage: (id) =>
+      pendingPages.has(id) &&
+      !pendingPages.get(id).isDestroyed() &&
+      /^https:\/\/(?:www2|olx-pay|adquirir)\.olx\.com\.br\/(?:desapega|ai|aderir|destaques)(?:[/?#]|$)/.test(
+        pendingPages.get(id).getURL(),
+      ),
     ownsPage: (id) =>
       workers.has(id) ||
       (prepared?.owner === id &&
